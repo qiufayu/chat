@@ -1,0 +1,95 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: chat-user
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${chat.ns.host}:8848
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+      config:
+        enabled: false
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+        server-addr: ${chat.ns.host}:8848
+  datasource:
+    url: jdbc:mysql://${chat.db.host}:${chat.db.post}/user_server?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: ${chat.db.pw}
+  data:
+    redis:
+      host: ${chat.rd.host}
+      port: ${chat.rd.post}
+      database: ${chat.rd.db}
+      password: ${chat.rd.pw}
+  rabbitmq:
+    port: ${chat.mq.port}
+    host: ${chat.mq.host}
+    username: ${chat.mq.un}
+    password: ${chat.mq.ps}
+    connection-timeout: 1s
+    virtual-host: /chat
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000ms
+        multiplier: 1
+        max-attempts: 3
+    publisher-returns: true
+    publisher-confirm-type: correlated
+
+knife4j:
+  enable: true
+  openapi:
+    title: ChatSystem接口文档
+    description: ChatSystem用户相关接口文档
+    group:
+      default:
+        group-name: default
+        api-rule: package
+        api-rule-resources:
+          - com.fayu.user.controller
+
+seata:
+  enabled: true
+  # 强制使用 file 模式，并在本地指定地址
+  registry:
+    type: file
+  service:
+    grouplist:
+      default: ${chat.ns.host}:8099
+    vgroup-mapping:
+      chat: "default"
+  tx-service-group: chat
+  data-source-proxy-mode: AT
+
+
+chat:
+  jwt:
+    location: classpath:hmall.jks
+    alias: hmall
+    password: hmall123
+    tokenTTL: 30m
+    refreshTTL: 30d
+  db:
+    host: 127.0.0.1
+    post: 3306
+    pw: Qfy20050110.
+  rd:
+    host: 127.0.0.1
+    post: 6379
+    pw: Qfy20050110.
+    db: 12
+  ns:
+    host: 192.168.182.65
+  mq:
+    host: 192.168.182.65
+    port: 5672
+    un: fayu
+    ps: fayu
+
+logging:
+  level:
+    com.fayu: debug

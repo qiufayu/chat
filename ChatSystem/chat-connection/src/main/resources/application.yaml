@@ -1,0 +1,27 @@
+logging:
+  level:
+    com.fayu.connection: debug
+spring:
+  application:
+    name: chat-connection
+  main:
+    web-application-type: none
+  cloud:
+    loadbalancer:
+      eager-load:
+        clients:
+          - chat-message
+    nacos:
+      discovery:
+        server-addr: ${chat.ns.host}:8848
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+      config:
+        enabled: false
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+        server-addr: ${chat.ns.host}:8848
+  data:
+    redis:
+      host: ${chat.rd.host}
+      port: ${chat.rd.post}
+      database: ${chat.rd.db}
+      password: ${chat.rd.pw}

@@ -1,0 +1,85 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: chat-group
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${chat.ns.host}:8848
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+      config:
+        enabled: false
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+        server-addr: ${chat.ns.host}:8848
+  datasource:
+    url: jdbc:mysql://${chat.db.host}:${chat.db.post}/group_server?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: ${chat.db.pw}
+  data:
+    redis:
+      host: ${chat.rd.host}
+      port: ${chat.rd.post}
+      database: ${chat.rd.db}
+      password: ${chat.rd.pw}
+  rabbitmq:
+    port: ${chat.mq.port}
+    host: ${chat.mq.host}
+    username: ${chat.mq.un}
+    password: ${chat.mq.ps}
+    connection-timeout: 1s
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+          max-interval: 10000ms
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000ms
+        multiplier: 1
+        max-attempts: 3
+    publisher-returns: true
+    publisher-confirm-type: correlated
+    virtual-host: /chat
+knife4j:
+  enable: true
+  openapi:
+    title: ChatSystem接口文档
+    description: ChatSystem群聊相关接口文档
+    group:
+      default:
+        group-name: default
+        api-rule: package
+        api-rule-resources:
+          - com.fayu.group.controller
+
+seata:
+  enabled: true
+  # 强制使用 file 模式，并在本地指定地址
+  registry:
+    type: file
+  service:
+    grouplist:
+      default: ${chat.ns.host}:8099
+    vgroup-mapping:
+      chat: "default"
+  tx-service-group: chat
+  data-source-proxy-mode: AT
+
+chat:
+  jwt:
+    location: classpath:hmall.jks
+    alias: hmall
+    password: hmall123
+    tokenTTL: 30m
+    refreshTTL: 30d
+
+logging:
+  level:
+    com.fayu: debug

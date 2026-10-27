@@ -1,0 +1,53 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chat-gateway
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${chat.ns.host}:8848
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+      config:
+        import-check:
+          enabled: false
+        server-addr: ${chat.ns.host}:8848
+        namespace: 0209fa6e-f222-4b48-a404-efe4e6b010da
+
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: chat-user
+              uri: lb://chat-user
+              predicates:
+                - Path=/user/**,/friend/**
+            - id: chat-group
+              uri: lb://chat-group
+              predicates:
+                - Path=/group/**
+  data:
+    redis:
+      host: ${chat.rd.host}
+      port: ${chat.rd.post}
+      database: ${chat.rd.db}
+      password: ${chat.rd.pw}
+
+chat:
+  jwt:
+    location: classpath:hmall.jks
+    alias: hmall
+    password: hmall123
+    tokenTTL: 30m
+    refreshTTL: 30d
+  auth:
+    excludePaths:
+      - /user/login
+      - /user/register
+      - /user/refresh
+
+logging:
+  level:
+    com.fayu: debug

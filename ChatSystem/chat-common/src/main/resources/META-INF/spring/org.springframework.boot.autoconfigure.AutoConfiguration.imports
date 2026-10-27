@@ -1,0 +1,3 @@
+com.fayu.common.config.CommonAutoConfig
+com.fayu.common.config.MvcConfig
+com.fayu.common.config.RabbitmqConfig

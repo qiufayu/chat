@@ -1,0 +1,17 @@
+chat:
+  db:
+    host: 127.0.0.1
+    post: 3306
+    pw: Qfy20050110.
+  rd:
+    host: 127.0.0.1
+    post: 6379
+    pw: Qfy20050110.
+    db: 12
+  ns:
+    host: 192.168.182.65
+  mq:
+    host: 192.168.182.65
+    port: 5672
+    un: fayu
+    ps: fayu

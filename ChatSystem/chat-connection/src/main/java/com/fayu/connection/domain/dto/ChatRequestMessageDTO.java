@@ -1,0 +1,9 @@
+package com.fayu.connection.domain.dto;
+
+import lombok.Data;
+
+@Data
+public class ChatRequestMessageDTO {
+    private Long to;
+    private String content;
+}
