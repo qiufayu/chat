@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +18,15 @@ import java.util.UUID;
 
 @Slf4j
 @SpringBootTest(classes = ChatUserApplication.class)
-@ActiveProfiles("test")
+@ActiveProfiles("local")
 public class AddUserAndFriendsTest {
 
     @Autowired
     private IUserServer userServer;
     @Autowired
     private IUserFriendServer userFriendServer;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Test
     void start(){
@@ -40,6 +43,21 @@ public class AddUserAndFriendsTest {
             ApplyFormDTO applyFormDTO = new ApplyFormDTO();
             applyFormDTO.setAccount(register.getAccount());
             userFriendServer.apply(applyFormDTO);
+        }
+    }
+
+    @Test
+    public void testAddRedisCacheOfUserFriend(){
+        System.out.println("===== 测试添加用户好友缓存 =====");
+        String keyPrefix = "user:friend:";
+        int startId = 1008;
+        int endId = 2004;
+        for (int i = startId ; i <= endId ; i++) {
+            // 1. 获取当前用户的 Redis Key
+            String currentUserKey = keyPrefix + i;
+            // 2. 清空一下旧数据，防止你重复跑测试导致数据无限叠加
+            stringRedisTemplate.delete(currentUserKey);
+            stringRedisTemplate.opsForSet().add(currentUserKey, String.valueOf(4));
         }
     }
 

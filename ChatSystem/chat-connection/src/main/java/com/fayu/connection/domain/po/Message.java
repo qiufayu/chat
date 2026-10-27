@@ -17,6 +17,7 @@ public class Message<T> implements Serializable {
     private Long id;
     private String type;
     private Long senderId;
+    private Long to;
     private String clientMessageId;
     private Long timeAt;
     private T payload;

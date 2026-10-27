@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class ChatResponseMessageVO {
+public  class ChatResponseMessageVO<T> {
     private Long messageId;
     private Long conversationId;
     private Long seq;
@@ -19,7 +19,7 @@ public class ChatResponseMessageVO {
     private Long toId;
     private Long groupId;
     private Integer messageType;
-    private String content;
+    private T payload;
     private String errorContent;
     private String url;
 }

@@ -48,4 +48,5 @@ public class MessageUtil {
             throw new RuntimeException("序列化失败："+"{"+ o.toString() +"}",e);
         }
     }
+
 }
