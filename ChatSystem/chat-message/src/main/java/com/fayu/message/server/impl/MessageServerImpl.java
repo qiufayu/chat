@@ -77,6 +77,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
             timeAt = message.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
             log.debug("重复消息 messageId = {}",message.getId());
             return SaveMsgVO.builder()
+                    .reuseMessage(true)
                     .messageId(message.getId())
                     .seq(message.getSeq())
                     .conversationId(message.getConversationId())
@@ -147,6 +148,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         }
         return SaveMsgVO.builder()
                 .messageId(message.getId())
+                .reuseMessage(false)
                 .seq(message.getSeq())
                 .conversationId(message.getConversationId())
                 .timeAt(now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())

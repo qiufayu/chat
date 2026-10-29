@@ -14,16 +14,24 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 
+import static com.fayu.common.constant.RabbitmqConstant.*;
+
 @Slf4j
 @Component
 @ChannelHandler.Sharable
+@RequiredArgsConstructor
 public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
+
+    private final RabbitTemplate rabbitTemplate;
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object o) throws Exception {
         SingleSession session = SingleSessionFactory.getSession();
@@ -56,6 +64,8 @@ public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
             if (userId != null){
                 singleSession.setAttr(channel, "userId",userId);
                 singleSession.bind(channel,userId);
+                // TODO 拉取离线消息
+                rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_GET_OFF_MESSAGE,userId);
                 log.debug("WebSocket 握手成功！ 获取到 userId={}",userId);
                 UserContext.setUser(userId);
             }else {
@@ -78,7 +88,6 @@ public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
         }
         super.userEventTriggered(ctx,env);
     }
-
 
     private Long getUserIdFromUri(String uriStr){
         try {

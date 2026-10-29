@@ -12,8 +12,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @Tag(name = "用户相关接口")
 @RestController
 @RequestMapping("/user")
@@ -22,6 +24,10 @@ public class UserController {
 
     private final IUserServer userServer;
 
+    @GetMapping
+    public void start(){
+        log.debug("message-server 连接成功");
+    }
     @Operation(summary = "用户登录接口")
     @PostMapping("login")
     public UserLoginVO login(@RequestBody LoginFormDTO loginDTO){

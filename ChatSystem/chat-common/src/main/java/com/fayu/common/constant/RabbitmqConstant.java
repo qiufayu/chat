@@ -18,4 +18,7 @@ public class RabbitmqConstant {
     public static final String OFF_MESSAGE_QUEUE = "off.message.queue";
     public static final String KEY_SAVE_OFF_MESSAGE = "off.message";
 
+    public static final String GET_OFF_MESSAGE_QUEUE = "get.off.message.queue";
+    public static final String KEY_GET_OFF_MESSAGE = "get.off.message";
+
 }

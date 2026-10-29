@@ -17,6 +17,7 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -35,7 +36,7 @@ public class RetryScheduleTask {
     private final MessageUtil messageUtil;
     private final RabbitTemplate rabbitTemplate;
 
-//    @Scheduled(cron = "*/5 * * * * ?")
+    @Scheduled(cron = "*/5 * * * * ?")
     public void retryScheduleTask() {
         SingleSession session = SingleSessionFactory.getSession();
         List<MessageOutbox> retryLists = msgClient.getRetryLists();

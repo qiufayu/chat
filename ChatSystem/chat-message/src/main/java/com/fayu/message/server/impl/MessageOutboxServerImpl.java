@@ -79,33 +79,34 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
             log.error("outbox 不存在 ,eventType={},eventKey={}",eventType,eventKey);
             return false;
         }
-        Integer status = outbox.getStatus();
-        Integer retryCount = outbox.getRetryCount();
-
-        if (!Objects.equals(status, OutboxStatusEnum.SENDING.getCode())){
-            return false;
-        }
+        Integer currentStatus = outbox.getStatus();
+        Integer newRetryCount = outbox.getRetryCount() == null ? 0 : outbox.getRetryCount();
 
         LambdaUpdateChainWrapper<MessageOutbox> wrapper = lambdaUpdate()
                 .eq(MessageOutbox::getEventKey, eventKey)
-                .eq(MessageOutbox::getEventType, eventType);
+                .eq(MessageOutbox::getEventType, eventType)
+                .eq(MessageOutbox::getStatus, currentStatus)
+                .set(MessageOutbox::getRetryCount, newRetryCount)
+                .set(MessageOutbox::getLastError, statusDTO.getLastError())
+                .set(MessageOutbox::getUpdatedAt, LocalDateTime.now());
+        // 达到最大重试次数
+        if (newRetryCount >= messageRetryProperties.getMaxRetryCount()){
+            wrapper.set(MessageOutbox::getStatus,OutboxStatusEnum.FAILED.getCode())
+                    .set(MessageOutbox::getNextRetryAt,null);
 
-        if (Objects.equals(status, OutboxStatusEnum.SENDING.getCode()) || status.equals(OutboxStatusEnum.PENDING.getCode())){
-            long nextInterval = getNextInterval(retryCount);
+        }else {
+
+            long nextInterval = getNextInterval(newRetryCount);
             LocalDateTime nextRetryAt = LocalDateTime.now().plusMinutes(nextInterval);
             wrapper.set(MessageOutbox::getStatus,OutboxStatusEnum.RETRY_WAIT.getCode())
-                    .set(MessageOutbox::getNextRetryAt,nextRetryAt)
-                    .set(MessageOutbox::getLastError,statusDTO.getLastError());
+                    .set(MessageOutbox::getNextRetryAt,nextRetryAt);
         }
-
-        // 达到最大重试次数
-        if (Objects.equals(retryCount, messageRetryProperties.getMaxRetryCount())){
-            wrapper.set(MessageOutbox::getStatus,OutboxStatusEnum.FAILED.getCode())
-                    .set(MessageOutbox::getNextRetryAt,null)
-                    .set(MessageOutbox::getLastError,statusDTO.getLastError());
+        // 执行更新
+        boolean updateSuccess = wrapper.update();
+        if (!updateSuccess) {
+            log.warn("更新 outbox 状态失败，可能已被其他线程处理。eventKey={}", eventKey);
         }
-        return wrapper.set(MessageOutbox::getUpdatedAt, LocalDateTime.now())
-                .update();
+        return updateSuccess;
     }
 
     @Override

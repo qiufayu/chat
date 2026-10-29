@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(value = "chat-user")
 public interface UserClient {
+    @GetMapping("/user")
+    void start();
+
     @GetMapping("/user/info")
     UserInfoDTO info();
 

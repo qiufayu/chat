@@ -17,6 +17,10 @@ import java.util.List;
 
 @FeignClient(value = "chat-message")
 public interface MsgClient {
+
+    @GetMapping("/msg")
+    void start();
+
     @PostMapping("/msg/save")
     SaveMsgVO saveMsg(@RequestBody SaveMsgDTO saveMsgDTO);
 

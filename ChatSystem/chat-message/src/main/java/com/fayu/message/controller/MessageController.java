@@ -8,14 +8,21 @@ import com.fayu.message.domain.vo.SaveMsgVO;
 import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/msg")
 @RequiredArgsConstructor
 public class MessageController {
 
     private final IMessageServer messageServer;
+
+    @GetMapping
+    public void start(){
+        log.debug("message-server 连接成功");
+    }
 
     @PostMapping("/save")
     public SaveMsgVO saveMsg(@RequestBody SaveMsgDTO saveMsgDTO){

@@ -61,9 +61,11 @@ public class MessageListener {
         }
         String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(messageId);
         Channel channel = session.getChannel(toId);
-        if (channel == null || !channel.isOpen()){
-            log.debug("用户 {} 不在线，消息转入离线存储或等待重试", toId);
-            saveOffMsgToBox(metadata, toId);
+        if (channel != null || !channel.isOpen()){
+            log.info("添加重试信息......");
+            updateStatusToRetry(metadata, eventKey, new BaseException("报错了",500));
+//            log.debug("用户 {} 不在线，消息转入离线存储或等待重试", toId);
+//            saveOffMsgToBox(metadata, toId);
             return;
         }
         Object payload = eventEnvelope.getPayload();
@@ -90,6 +92,19 @@ public class MessageListener {
         );
 
     }
+
+//    @RabbitListener(
+//            bindings = @QueueBinding(
+//                    value = @Queue(name = GET_OFF_MESSAGE_QUEUE,durable = "true"),
+//                    exchange = @Exchange(name = MESSAGE_EXCHANGE,type = "topic"),
+//                    key = {KEY_GET_OFF_MESSAGE}
+//            )
+//    )
+//    public void sendOffMessageListener(Long userId){
+//        while(true){
+//            msgClient.
+//        }
+//    }
 
     private void saveOffMsgToBox(MessageMetadata metadata, Long toId) {
         SaveOffMessageBoxDTO offMessageBoxDTO = SaveOffMessageBoxDTO.builder()
@@ -124,14 +139,5 @@ public class MessageListener {
     }
 
 
-    @RabbitListener(
-            bindings = @QueueBinding(
-                    value = @Queue(name = RETRY_MESSAGE_QUEUE,durable = "true"),
-                    exchange = @Exchange(name = MESSAGE_EXCHANGE,type = "topic"),
-                    key = {KEY_RETRY_MESSAGE}
-            )
-    )
-    public void retryMessageListener(){
-        log.debug("消息重试");
-    }
+
 }

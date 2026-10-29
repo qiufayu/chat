@@ -8,4 +8,5 @@ public class SaveMsgVO {
     private Long seq;
     private Long conversationId;
     private Long timeAt;
+    private Boolean reuseMessage;
 }

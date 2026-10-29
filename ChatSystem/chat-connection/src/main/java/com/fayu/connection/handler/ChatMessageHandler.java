@@ -40,8 +40,6 @@ import static com.fayu.common.constant.RabbitmqConstant.*;
 @RequiredArgsConstructor
 public class ChatMessageHandler extends SimpleChannelInboundHandler<Message<?>> {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-
     private final MsgClient msgClient;
     private final UserClient userClient;
     private final ChatBusinessExecutor chatBusinessExecutor;
@@ -72,11 +70,16 @@ public class ChatMessageHandler extends SimpleChannelInboundHandler<Message<?>> 
                     return;
                 }
                 ctx.writeAndFlush(new TextWebSocketFrame("ack"));
-
                 MessageMetadata metadata = eventEnvelope.getMetadata();
+
                 // 获取接收者通道
                 Channel receiveChannel = session.getChannel(toUserId);
-                if (receiveChannel == null) {
+                if (Boolean.TRUE.equals(metadata.isReuseMessage())){
+                    log.debug("重复消息messageId={}，发送akc",metadata.getMessageId());
+                    receiveChannel.writeAndFlush(new TextWebSocketFrame("ack"));
+                    return;
+                }
+                if (receiveChannel == null || !receiveChannel.isOpen()) {
                     log.info("用户 userId={} 离线,消息添加至离线消息池 messageId={}", toUserId,metadata.getMessageId());
                     SaveOffMessageBoxDTO offMessageBoxDTO = SaveOffMessageBoxDTO.builder()
                             .messageId(metadata.getMessageId())
@@ -135,6 +138,7 @@ public class ChatMessageHandler extends SimpleChannelInboundHandler<Message<?>> 
         if (saveMsgVO == null){
             return null;
         }
+        log.debug("saveMsgVO={}",saveMsgVO);
         MessageMetadata metadata = MessageMetadata.builder()
                 .conversationId(saveMsgVO.getConversationId())
                 .sendId(msg.getSenderId())
@@ -145,6 +149,7 @@ public class ChatMessageHandler extends SimpleChannelInboundHandler<Message<?>> 
                 .eventType(EventType.MESSAGE_CREATE.toString())
                 .seq(saveMsgVO.getSeq())
                 .timestamp(saveMsgVO.getTimeAt())
+                .isReuseMessage(saveMsgVO.getReuseMessage())
                 .build();
         return EventEnvelope.builder()
                 .metadata(metadata)
