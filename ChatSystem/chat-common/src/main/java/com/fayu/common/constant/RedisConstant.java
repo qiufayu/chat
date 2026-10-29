@@ -9,6 +9,7 @@ public class RedisConstant {
      */
     public static String USER_REG_ID = PREFIX + "user:reg:id";
     public static String GROUP_CRE_ID = PREFIX + "group:cre:id";
+    public static String SEQ_INC = PREFIX + "%s";
 
     /**
      * remark 随机备注

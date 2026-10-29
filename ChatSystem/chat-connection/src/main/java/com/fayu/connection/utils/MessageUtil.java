@@ -19,6 +19,7 @@ public class MessageUtil {
         return Message.<T>builder()
                 .id(rsqMsg.getId())
                 .type(rsqMsg.getType())
+                .to(rsqMsg.getTo())
                 .clientMessageId(rsqMsg.getClientMessageId())
                 .senderId(rsqMsg.getSenderId())
                 .payload(payload)

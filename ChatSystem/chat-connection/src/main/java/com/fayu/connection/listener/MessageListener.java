@@ -5,9 +5,12 @@ import com.fayu.api.client.MsgClient;
 import com.fayu.api.domain.dto.OutBoxUpdateStatusDTO;
 import com.fayu.api.domain.po.EventEnvelope;
 import com.fayu.api.domain.po.MessageMetadata;
+import com.fayu.common.constant.RabbitmqConstant;
 import com.fayu.common.exception.BaseException;
+import com.fayu.connection.domain.dto.SaveOffMessageBoxDTO;
 import com.fayu.connection.domain.vo.ChatResponseMessageVO;
 import com.fayu.connection.enums.EventType;
+import com.fayu.connection.enums.OffMsgStatus;
 import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
@@ -23,7 +26,10 @@ import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
 
 import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
 import static com.fayu.common.constant.RabbitmqConstant.*;
@@ -34,6 +40,7 @@ import static com.fayu.common.constant.RabbitmqConstant.*;
 public class MessageListener {
     private final MessageUtil messageUtil;
     private final MsgClient msgClient;
+    private final RabbitTemplate rabbitTemplate;
     @RabbitListener(
             bindings = @QueueBinding(
                     value = @Queue(name = SEND_MESSAGE_QUEUE,durable = "true"),
@@ -52,44 +59,68 @@ public class MessageListener {
         if (toId == null ||sendId == null || messageId == null){
             throw  new BaseException("服务错误，接收id不可以为空",500);
         }
+        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(messageId);
         Channel channel = session.getChannel(toId);
         if (channel == null || !channel.isOpen()){
             log.debug("用户 {} 不在线，消息转入离线存储或等待重试", toId);
-
+            saveOffMsgToBox(metadata, toId);
             return;
         }
-
         Object payload = eventEnvelope.getPayload();
+        Long conversationId = metadata.getConversationId();
+        Integer messageType = metadata.getMessageType();
         ChatResponseMessageVO<Object> messageVO = new ChatResponseMessageVO<>();
         BeanUtil.copyProperties(metadata, messageVO);
         messageVO.setPayload(payload);
-
+        messageVO.setConversationId(conversationId);
+        messageVO.setMessageType(messageType);
         String json = messageUtil.toJson(messageVO);
+        ChannelFuture channelFuture = channel.writeAndFlush(new TextWebSocketFrame(json))
+                .addListener(
+                future -> {
+                    if (future.isSuccess()){
 
-        // 修改outbox状态
-        boolean pass = outboxMessageStateUpdate(eventEnvelope);
-        if (!pass){
-            log.error("消息推送失败，messageId={}，准备重试", messageId);
-            outboxMessageStateUpdate(eventEnvelope);
-        }
-        ChannelFuture channelFuture = channel.writeAndFlush(new TextWebSocketFrame(json));
-        channelFuture.addListener(new GenericFutureListener<Future<? super Void>>() {
-            @Override
-            public void operationComplete(Future<? super Void> future) throws Exception {
-                if (future.isSuccess()){
-
-                    boolean pass = outboxMessageStateUpdate(eventEnvelope);
-                    if (pass){
-                        log.debug("消息推送成功，messageId={}", messageId);
+                        updateStatusToPass(metadata, eventKey);
+                    }else{
+                        Throwable cause = future.cause();
+                        log.error("消息推送失败，messageId={}，准备重试", messageId, cause);
+                        updateStatusToRetry(metadata, eventKey, cause);
                     }
-                }else{
-                    Throwable cause = future.cause();
-                    log.error("消息推送失败，messageId={}，准备重试", messageId, cause);
-                    outboxMessageStateUpdate(eventEnvelope);
                 }
-            }
-        });
+        );
 
+    }
+
+    private void saveOffMsgToBox(MessageMetadata metadata, Long toId) {
+        SaveOffMessageBoxDTO offMessageBoxDTO = SaveOffMessageBoxDTO.builder()
+                .messageId(metadata.getMessageId())
+                .userId(toId)
+                .conversationId(metadata.getConversationId())
+                .createdAt(LocalDateTime.now())
+                .status(OffMsgStatus.PENDING.getCode())
+                .build();
+        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_SAVE_OFF_MESSAGE,offMessageBoxDTO);
+    }
+
+    private void updateStatusToPass(MessageMetadata metadata, String eventKey) {
+        OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
+                .eventType(metadata.getEventType())
+                .eventKey(eventKey)
+                .status(OutboxStatusEnum.SENT.getCode())
+                .publishedAt(LocalDateTime.now())
+                .build();
+        // 修改outbox状态
+        msgClient.updateStatus(statusDTO);
+    }
+    private void updateStatusToRetry(MessageMetadata metadata, String eventKey, Throwable lastError) {
+        OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
+                .eventType(metadata.getEventType())
+                .eventKey(eventKey)
+                .lastError(lastError.getMessage())
+                .publishedAt(LocalDateTime.now())
+                .build();
+        // 修改outbox状态
+        msgClient.updateStatusToRetry(statusDTO);
     }
 
 
@@ -103,10 +134,4 @@ public class MessageListener {
     public void retryMessageListener(){
         log.debug("消息重试");
     }
-
-
-    private boolean outboxMessageStateUpdate(EventEnvelope<?> eventEnvelope) {
-        return msgClient.updateStatus(eventEnvelope);
-    }
-
 }

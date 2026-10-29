@@ -13,6 +13,7 @@ public class RequestMessage implements Serializable {
     private Long id;
     private String type;
     private Long senderId;
+    private Long to;
     private String clientMessageId;
     private Long timeAt;
     private JsonNode payload;

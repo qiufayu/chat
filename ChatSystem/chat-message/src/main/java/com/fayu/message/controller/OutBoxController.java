@@ -7,6 +7,7 @@ import com.fayu.message.server.IMessageOutboxServer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -16,15 +17,24 @@ public class OutBoxController {
     private final IMessageOutboxServer messageOutboxServer;
 
     @PostMapping("/update/status")
-    public boolean updateStatus(@RequestBody OutBoxUpdateStatusDTO statusDTO){
+    public boolean updateStatusToPass(@RequestBody OutBoxUpdateStatusDTO statusDTO){
         return messageOutboxServer.updateStatus(statusDTO);
     }
-    @PostMapping("/retry/message")
-    public boolean retryMessageUpdateStatus(@RequestBody OutBoxUpdateStatusDTO statusDTO){
-        return messageOutboxServer.retryMessageUpdateStatus(statusDTO);
+    @PostMapping("/update/status/retry")
+    public boolean updateStatusToRetry(@RequestBody OutBoxUpdateStatusDTO statusDTO){
+        return messageOutboxServer.updateStatusToRetry(statusDTO);
     }
     @GetMapping("/retry/list")
     public List<MessageOutbox> getRetryLists(){
         return messageOutboxServer.getRetryLists();
+    }
+    @GetMapping("/retry/lock")
+    public boolean getRetryLock(@RequestParam("outboxId") Long outboxId, @RequestParam("lockedBy") String lockedBy){
+        return messageOutboxServer.getRetryLock(outboxId,lockedBy);
+    }
+    @PostMapping("/retry/unlock")
+    public void unlockRetry(@RequestParam("outboxId") Long outboxId,
+                            @RequestParam("lockedBy") String lockedBy){
+        messageOutboxServer.unlockRetry(outboxId,lockedBy);
     }
 }

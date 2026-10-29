@@ -17,6 +17,7 @@ public class MessageMetadata {
     private String groupId;
 
     private Long messageId;
+    private Integer messageType;
     private String clientMessageId;
     private String eventType;
 

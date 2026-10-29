@@ -1,4 +1,5 @@
 import com.fayu.connection.ChatConnectionApplication;
+import com.fayu.connection.task.RetryScheduleTask;
 import feign.Client;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,11 +14,17 @@ import java.net.URISyntaxException;
 public class test {
     @Autowired
     private Client feignClient;
+    @Autowired
+    private RetryScheduleTask retryScheduleTask;
     @Test
     public void test() throws URISyntaxException {
         System.out.println("===== 当前 Feign 客户端是: " + feignClient.getClass().getName() + " =====");
     }
 
+    @Test
+    public void testOfScheduleTask() throws InterruptedException {
+           retryScheduleTask.retryScheduleTask();
+    }
 
 }
 

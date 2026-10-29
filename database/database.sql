@@ -127,7 +127,7 @@ CREATE TABLE `message` (
 	`recalled_at` DATETIME(3) DEFAULT NULL COMMENT '消息撤回时间',
 	`is_blocked` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否违规内容',
 	`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `update	d_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	
 	PRIMARY KEY(`id`),
 	UNIQUE KEY `uk_conversation_seq` (`conversation_id`, `seq`),
@@ -162,6 +162,23 @@ CREATE TABLE `message_outbox` (
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_0900_ai_ci
 COMMENT='消息可靠投递事件表';
+
+
+create table `off_message_box` (
+	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '离线消息id',
+	message_id BIGINT UNSIGNED NOT NULL COMMENT '对应的消息编号',
+	conversation_id BIGINT UNSIGNED NOT NULL COMMENT '所属会话编号',
+	seq BIGINT UNSIGNED NOT NULL COMMENT '消息在会话中的顺序',
+	user_id BIGINT(20) UNSIGNED NOT NULL COMMENT '所属用户',
+	status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-待拉取 1-已ACK',
+	created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+	acked_at DATETIME DEFAULT NULL,
+	PRIMARY KEY (`id`)
+	UNIQUE KEY `uk_user_msg` (`user_id`,`message_id`),
+  KEY `idx_user_conv_status_seq` (`user_id`, `conversation_id`, `status`, `seq`),
+  KEY `idx_status_acked` (`status`, `acked_at`),
+  KEY `idx_created` (`created_at`)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户离线消息收件箱';
 
 
 	CREATE TABLE device_sync_cursor (

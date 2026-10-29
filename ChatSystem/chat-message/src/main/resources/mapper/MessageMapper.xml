@@ -1,4 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.fayu.message.mapper.MessageMapper"/>
+<mapper namespace="com.fayu.message.mapper.MessageMapper">
+    <select id="queryRetryMessages" resultType="com.fayu.message.domain.po.MessageOutbox">
+        select id,message_id,conversation_id,seq,payload
+        from message_outbox
+        where id in (
+            select  id from message_outbox where status = 3 and isnull(locked_at) and next_retry_at &lt;= NOW(3)
+        )
+    </select>
+    <select id="getMessageInfo" resultType="com.fayu.message.domain.po.MessageInfoRow">
+        SELECT
+            m.id                AS messageId,
+            m.conversation_id   AS conversationId,
+            m.seq               AS seq,
+            c.conversation_type AS conversationType,
+            m.sender_id         AS sendId,
+            CASE
+                WHEN c.conversation_type = 1 THEN
+                    CASE WHEN c.user_low_id = m.sender_id
+                             THEN c.user_high_id
+                         ELSE c.user_low_id
+                        END
+                ELSE NULL
+                END                 AS toId,
+            c.group_id          AS groupId,
+            m.message_type      AS messageType,
+            m.text_content      AS textContent,
+            m.attachment_id     AS attachmentId,
+            m.is_recalled       AS isRecalled,
+            m.is_blocked        AS isBlocked
+        FROM message m
+                 INNER JOIN conversation c ON c.id = m.conversation_id
+        WHERE m.conversation_id = 268
+          AND m.seq = 5
+        LIMIT 1
+    </select>
+</mapper>

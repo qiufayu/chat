@@ -15,4 +15,7 @@ public class RabbitmqConstant {
     public static final String RETRY_MESSAGE_QUEUE = "retry.message.queue";
     public static final String KEY_RETRY_MESSAGE = "retry.message";
 
+    public static final String OFF_MESSAGE_QUEUE = "off.message.queue";
+    public static final String KEY_SAVE_OFF_MESSAGE = "off.message";
+
 }

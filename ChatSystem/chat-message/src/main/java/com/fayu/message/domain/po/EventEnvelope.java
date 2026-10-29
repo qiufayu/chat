@@ -1,6 +1,5 @@
 package com.fayu.message.domain.po;
 
-import com.fayu.api.domain.po.MessageMetadata;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

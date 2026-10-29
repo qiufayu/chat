@@ -6,27 +6,25 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
 import com.fayu.message.config.MessageRetryProperties;
+import com.fayu.message.domain.dto.ChatRequestMessageDTO;
 import com.fayu.message.domain.dto.MessagePayloadDTO;
 import com.fayu.message.domain.dto.SaveMsgDTO;
 import com.fayu.message.domain.dto.UpdateConversationDTO;
 import com.fayu.message.domain.po.Message;
+import com.fayu.message.domain.po.MessageInfoRow;
 import com.fayu.message.domain.po.MessageOutbox;
+import com.fayu.message.domain.vo.ChatResponseMessageVO;
 import com.fayu.message.domain.vo.ConversationVO;
 import com.fayu.message.domain.vo.SaveMsgVO;
-import com.fayu.message.enums.ConversationStatus;
 import com.fayu.message.enums.EventType;
 import com.fayu.message.enums.OutboxStatusEnum;
 import com.fayu.message.enums.YesNoStatus;
-import com.fayu.message.mapper.ConversationMapper;
 import com.fayu.message.mapper.MessageMapper;
 import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IMessageOutboxServer;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.seata.spring.annotation.GlobalTransactional;
-import org.aspectj.bridge.MessageUtil;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.retry.annotation.Backoff;
@@ -38,8 +36,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
-import static com.fayu.common.constant.RabbitmqConstant.KEY_UPDATE_CONVERSATION;
-import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
+import static com.fayu.common.constant.RedisConstant.SEQ_INC;
 
 @Slf4j
 @Service
@@ -50,6 +47,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
     private final RedisIdWorker redisIdWorker;
     private final MessageRetryProperties messageRetryProperties;
     private final IMessageOutboxServer messageOutboxServer;
+    private final MessageMapper messageMapper;
 
     @Override
     @Retryable(
@@ -94,7 +92,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         log.debug("toId={} -> sendId={} 获取到会话conversationId={}",toId,senderId,conversation.getConversationId());
 
         Long conversationId = conversation.getConversationId();
-        Long seq = redisIdWorker.msgSeqIncrease(conversationId.toString());
+        Long seq = redisIdWorker.msgSeqIncrease(SEQ_INC.formatted(conversationId));
         now = LocalDateTime.now();
         message = Message.builder()
                 .clientMessageId(clientMessageId)
@@ -153,5 +151,35 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .conversationId(message.getConversationId())
                 .timeAt(now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
                 .build();
+    }
+
+    @Override
+    public  ChatResponseMessageVO<ChatRequestMessageDTO> getMessageInfo(Long conversationId, Long seq) {
+        MessageInfoRow row = messageMapper.getMessageInfo(conversationId,seq);
+        if (row == null) return null;
+
+        ChatResponseMessageVO<ChatRequestMessageDTO> vo = new ChatResponseMessageVO<>();
+        vo.setMessageId(row.getMessageId());
+        vo.setConversationId(row.getConversationId());
+        vo.setSeq(row.getSeq());
+        vo.setConversationType(row.getConversationType());
+        vo.setSendId(row.getSendId());
+        vo.setToId(row.getToId());
+        vo.setGroupId(row.getGroupId());
+        vo.setMessageType(row.getMessageType());
+
+        // payload 统一是 ChatRequestMessageDTO，content 取文本内容
+        ChatRequestMessageDTO payload = new ChatRequestMessageDTO();
+        payload.setContent(row.getTextContent());   // 图片/文件可放 attachmentId 或 url
+        vo.setPayload(payload);
+
+        // 撤回 / 违规
+        if (row.getIsRecalled() != null && row.getIsRecalled() == 1) {
+            vo.setErrorContent("消息已撤回");
+        }
+        if (row.getIsBlocked() != null && row.getIsBlocked() == 1) {
+            vo.setErrorContent("消息含违规内容");
+        }
+        return vo;
     }
 }
