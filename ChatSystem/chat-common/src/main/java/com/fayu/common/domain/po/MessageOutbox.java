@@ -1,5 +1,8 @@
-package com.fayu.api.domain.po;
+package com.fayu.common.domain.po;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.*;
 import lombok.experimental.Accessors;
 
@@ -10,6 +13,9 @@ import java.time.LocalDateTime;
  * 消息可靠投递事件表
  */
 @Data
+@EqualsAndHashCode(callSuper = false)
+@Accessors(chain = true)
+@TableName("message_outbox")
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
@@ -20,6 +26,7 @@ public class MessageOutbox implements Serializable {
     /**
      * 消息事件编号
      */
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
     /**

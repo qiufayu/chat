@@ -3,8 +3,8 @@ package com.fayu.message.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.fayu.message.domain.po.Message;
 import com.fayu.message.domain.po.MessageInfoRow;
-import com.fayu.message.domain.po.MessageOutbox;
-import com.fayu.message.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.po.MessageOutbox;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
 
 import java.util.List;
 

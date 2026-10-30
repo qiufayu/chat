@@ -1,8 +1,8 @@
 package com.fayu.message.controller;
 
 
-import com.fayu.message.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.message.domain.po.MessageOutbox;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.message.server.IMessageOutboxServer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

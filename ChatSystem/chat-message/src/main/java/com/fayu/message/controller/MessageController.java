@@ -1,10 +1,10 @@
 package com.fayu.message.controller;
 
-import com.fayu.message.domain.dto.ChatRequestMessageDTO;
-import com.fayu.message.domain.dto.SaveMsgDTO;
-import com.fayu.message.domain.vo.ChatResponseMessageVO;
-import com.fayu.message.domain.vo.ConversationVO;
-import com.fayu.message.domain.vo.SaveMsgVO;
+import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.SaveMsgDTO;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.vo.ConversationVO;
+import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;

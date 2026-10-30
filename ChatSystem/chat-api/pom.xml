@@ -19,6 +19,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.fayu</groupId>
+            <artifactId>chat-common</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
         <!--openFeign-->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

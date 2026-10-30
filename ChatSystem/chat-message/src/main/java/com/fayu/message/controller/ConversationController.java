@@ -1,6 +1,6 @@
 package com.fayu.message.controller;
 
-import com.fayu.message.domain.vo.ConversationVO;
+import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.message.server.IConversationServer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;

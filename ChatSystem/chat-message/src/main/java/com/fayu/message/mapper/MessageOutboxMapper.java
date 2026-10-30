@@ -1,7 +1,7 @@
 package com.fayu.message.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.fayu.message.domain.po.MessageOutbox;
+import com.fayu.common.domain.po.MessageOutbox;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

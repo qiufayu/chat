@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
 import com.fayu.message.config.MessageRetryProperties;
-import com.fayu.message.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.message.domain.po.MessageOutbox;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.message.enums.OutboxStatusEnum;
 import com.fayu.message.mapper.MessageMapper;
 import com.fayu.message.mapper.MessageOutboxMapper;

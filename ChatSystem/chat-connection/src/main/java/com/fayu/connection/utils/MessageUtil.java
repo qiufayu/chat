@@ -2,7 +2,7 @@ package com.fayu.connection.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fayu.connection.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.ChatRequestMessageDTO;
 import com.fayu.connection.domain.po.Message;
 import com.fayu.connection.domain.po.RequestMessage;
 import org.springframework.stereotype.Component;

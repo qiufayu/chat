@@ -1,8 +1,8 @@
 package com.fayu.message.server;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.fayu.message.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.message.domain.po.MessageOutbox;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.po.MessageOutbox;
 
 import java.util.List;
 

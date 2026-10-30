@@ -1,4 +1,4 @@
-package com.fayu.message.domain.po;
+package com.fayu.common.domain.po;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

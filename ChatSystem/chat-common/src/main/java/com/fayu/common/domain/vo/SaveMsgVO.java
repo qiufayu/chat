@@ -1,8 +1,10 @@
-package com.fayu.api.domain.vo;
+package com.fayu.common.domain.vo;
 
+import lombok.Builder;
 import lombok.Data;
 
 @Data
+@Builder
 public class SaveMsgVO {
     private Long messageId;
     private Long seq;

@@ -3,17 +3,17 @@ package com.fayu.connection.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fayu.api.client.MsgClient;
 import com.fayu.api.client.UserClient;
-import com.fayu.api.domain.dto.SaveMsgDTO;
-import com.fayu.api.domain.po.EventEnvelope;
-import com.fayu.api.domain.po.MessageMetadata;
-import com.fayu.api.domain.vo.SaveMsgVO;
+import com.fayu.common.domain.dto.SaveMsgDTO;
+import com.fayu.common.domain.po.EventEnvelope;
+import com.fayu.common.domain.po.MessageMetadata;
+import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
-import com.fayu.connection.domain.dto.ChatRequestMessageDTO;
-import com.fayu.connection.domain.dto.SaveOffMessageBoxDTO;
+import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.SaveOffMessageBoxDTO;
 import com.fayu.connection.domain.po.Message;
 import com.fayu.connection.domain.po.ResponseMessage;
-import com.fayu.connection.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.connection.enums.EventType;
 import com.fayu.connection.enums.MessageContentType;
 import com.fayu.connection.enums.MessageType;
@@ -77,19 +77,6 @@ public class ChatMessageHandler extends SimpleChannelInboundHandler<Message<?>> 
                 if (Boolean.TRUE.equals(metadata.isReuseMessage())){
                     log.debug("重复消息messageId={}，发送akc",metadata.getMessageId());
                     receiveChannel.writeAndFlush(new TextWebSocketFrame("ack"));
-                    return;
-                }
-                if (receiveChannel == null || !receiveChannel.isOpen()) {
-                    log.info("用户 userId={} 离线,消息添加至离线消息池 messageId={}", toUserId,metadata.getMessageId());
-                    SaveOffMessageBoxDTO offMessageBoxDTO = SaveOffMessageBoxDTO.builder()
-                            .messageId(metadata.getMessageId())
-                            .userId(toUserId)
-                            .conversationId(metadata.getConversationId())
-                            .createdAt(LocalDateTime.now())
-                            .seq(metadata.getSeq())
-                            .status(OffMsgStatus.PENDING.getCode())
-                            .build();
-                    rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_SAVE_OFF_MESSAGE,offMessageBoxDTO);
                     return;
                 }
                 log.debug("开始异步发送消息 ，toUserId={} messageId={}",toUserId,metadata.getMessageId());

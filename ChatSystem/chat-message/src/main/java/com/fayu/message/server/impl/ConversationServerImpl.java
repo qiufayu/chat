@@ -10,7 +10,7 @@ import com.fayu.common.utils.RedisIdWorker;
 import com.fayu.message.domain.dto.UpdateConversationDTO;
 import com.fayu.message.domain.po.Conversation;
 import com.fayu.message.domain.po.UserConversation;
-import com.fayu.message.domain.vo.ConversationVO;
+import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.message.enums.ConversationStatus;
 import com.fayu.message.enums.ConversationType;
 import com.fayu.message.enums.YesNoStatus;

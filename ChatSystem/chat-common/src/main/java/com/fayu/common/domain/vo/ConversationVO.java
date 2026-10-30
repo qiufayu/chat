@@ -1,7 +1,5 @@
-package com.fayu.message.domain.vo;
+package com.fayu.common.domain.vo;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -13,10 +11,21 @@ public class ConversationVO {
 
     private Integer conversationType;
 
+    private Long userLowId;
+
+    private Long userHighId;
+
+    private Long groupId;
+
     private Long lastSeq;
 
     private Long lastMessageId;
 
     private LocalDateTime lastMessageAt;
 
+    private Integer status;
+
+    private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
 }

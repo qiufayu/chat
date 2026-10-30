@@ -1,11 +1,11 @@
 package com.fayu.connection.task;
 
 import com.fayu.api.client.MsgClient;
-import com.fayu.api.domain.dto.ChatRequestMessageDTO;
-import com.fayu.api.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.api.domain.po.MessageOutbox;
-import com.fayu.api.domain.vo.ChatResponseMessageVO;
-import com.fayu.connection.domain.dto.SaveOffMessageBoxDTO;
+import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.po.MessageOutbox;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.dto.SaveOffMessageBoxDTO;
 import com.fayu.connection.enums.OffMsgStatus;
 import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.executor.OutboxRetryExecutor;

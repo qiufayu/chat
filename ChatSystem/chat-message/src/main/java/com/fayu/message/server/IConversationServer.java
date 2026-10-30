@@ -3,7 +3,7 @@ package com.fayu.message.server;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.fayu.message.domain.dto.UpdateConversationDTO;
 import com.fayu.message.domain.po.Conversation;
-import com.fayu.message.domain.vo.ConversationVO;
+import com.fayu.common.domain.vo.ConversationVO;
 
 
 public interface IConversationServer extends IService<Conversation> {

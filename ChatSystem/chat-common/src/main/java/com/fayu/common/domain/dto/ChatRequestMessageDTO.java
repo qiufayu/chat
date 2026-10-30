@@ -1,4 +1,4 @@
-package com.fayu.connection.domain.dto;
+package com.fayu.common.domain.dto;
 
 import lombok.Data;
 

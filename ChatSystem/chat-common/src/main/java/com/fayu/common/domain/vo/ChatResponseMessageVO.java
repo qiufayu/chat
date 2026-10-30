@@ -1,4 +1,4 @@
-package com.fayu.message.domain.vo;
+package com.fayu.common.domain.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public  class ChatResponseMessageVO<T> {
+public class ChatResponseMessageVO<T> {
     private Long messageId;
     private Long conversationId;
     private Long seq;

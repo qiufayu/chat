@@ -1,14 +1,14 @@
 package com.fayu.api.client;
 
-import com.fayu.api.domain.dto.ChatRequestMessageDTO;
-import com.fayu.api.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.api.domain.dto.SaveMsgDTO;
+import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.dto.SaveMsgDTO;
 import com.fayu.api.domain.dto.VerifyMsgDTO;
-import com.fayu.api.domain.po.EventEnvelope;
-import com.fayu.api.domain.po.MessageOutbox;
-import com.fayu.api.domain.vo.ChatResponseMessageVO;
-import com.fayu.api.domain.vo.ConversationVO;
-import com.fayu.api.domain.vo.SaveMsgVO;
+import com.fayu.common.domain.po.EventEnvelope;
+import com.fayu.common.domain.po.MessageOutbox;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.vo.ConversationVO;
+import com.fayu.common.domain.vo.SaveMsgVO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 

@@ -2,13 +2,13 @@ package com.fayu.connection.listener;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.fayu.api.client.MsgClient;
-import com.fayu.api.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.api.domain.po.EventEnvelope;
-import com.fayu.api.domain.po.MessageMetadata;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.po.EventEnvelope;
+import com.fayu.common.domain.po.MessageMetadata;
 import com.fayu.common.constant.RabbitmqConstant;
 import com.fayu.common.exception.BaseException;
-import com.fayu.connection.domain.dto.SaveOffMessageBoxDTO;
-import com.fayu.connection.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.dto.SaveOffMessageBoxDTO;
+import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.connection.enums.EventType;
 import com.fayu.connection.enums.OffMsgStatus;
 import com.fayu.connection.enums.OutboxStatusEnum;
@@ -62,10 +62,10 @@ public class MessageListener {
         String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(messageId);
         Channel channel = session.getChannel(toId);
         if (channel != null || !channel.isOpen()){
-            log.info("添加重试信息......");
-            updateStatusToRetry(metadata, eventKey, new BaseException("报错了",500));
-//            log.debug("用户 {} 不在线，消息转入离线存储或等待重试", toId);
-//            saveOffMsgToBox(metadata, toId);
+            //log.info("添加重试信息......");
+            //updateStatusToRetry(metadata, eventKey, new BaseException("报错了",500));
+            log.debug("用户 {} 不在线拒绝推送....", toId);
+            //saveOffMsgToBox(metadata, toId);
             return;
         }
         Object payload = eventEnvelope.getPayload();
@@ -81,7 +81,6 @@ public class MessageListener {
                 .addListener(
                 future -> {
                     if (future.isSuccess()){
-
                         updateStatusToPass(metadata, eventKey);
                     }else{
                         Throwable cause = future.cause();
@@ -105,17 +104,6 @@ public class MessageListener {
 //            msgClient.
 //        }
 //    }
-
-    private void saveOffMsgToBox(MessageMetadata metadata, Long toId) {
-        SaveOffMessageBoxDTO offMessageBoxDTO = SaveOffMessageBoxDTO.builder()
-                .messageId(metadata.getMessageId())
-                .userId(toId)
-                .conversationId(metadata.getConversationId())
-                .createdAt(LocalDateTime.now())
-                .status(OffMsgStatus.PENDING.getCode())
-                .build();
-        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_SAVE_OFF_MESSAGE,offMessageBoxDTO);
-    }
 
     private void updateStatusToPass(MessageMetadata metadata, String eventKey) {
         OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
