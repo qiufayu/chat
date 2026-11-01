@@ -2,6 +2,7 @@ package com.fayu.message.controller;
 
 import com.fayu.common.domain.dto.DeliveryAckDTO;
 import com.fayu.common.domain.dto.ReadAckDTO;
+import com.fayu.common.domain.vo.IntervalSyncBatchVO;
 import com.fayu.common.domain.vo.SyncBatchVO;
 import com.fayu.common.domain.vo.SyncSummaryVO;
 import com.fayu.message.server.ISyncServer;
@@ -42,5 +43,22 @@ public class SyncController {
     public boolean readAck(@RequestParam("userId") Long userId,
                            @RequestBody ReadAckDTO ack) {
         return syncServer.ackRead(userId, ack);
+    }
+
+    /**
+     * 客户端主动区间同步，不走socket，每次拉取只能最多取100条
+     * @param deviceId
+     * @param conversationId
+     * @param start
+     * @param end
+     * @return
+     */
+    @GetMapping("/interval/sync")
+    public SyncBatchVO intervalSyncMessages(@RequestParam("deviceId") String deviceId,
+                                                    @RequestParam("conversationId") Long conversationId,
+                                                    @RequestParam("start") Long start,
+                                                    @RequestParam("end") Long end
+                                                    ){
+        return syncServer.intervalSyncMessages(deviceId,conversationId,start,end);
     }
 }

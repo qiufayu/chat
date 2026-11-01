@@ -3,10 +3,12 @@ package com.fayu.message.server.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fayu.common.domain.dto.DeliveryAckDTO;
 import com.fayu.common.domain.dto.ReadAckDTO;
+import com.fayu.common.domain.vo.IntervalSyncBatchVO;
 import com.fayu.common.domain.vo.SyncBatchVO;
 import com.fayu.common.domain.vo.SyncMessageVO;
 import com.fayu.common.domain.vo.SyncSummaryVO;
 import com.fayu.common.exception.BaseException;
+import com.fayu.common.utils.UserContext;
 import com.fayu.message.domain.po.Conversation;
 import com.fayu.message.domain.po.DeviceSyncCursor;
 import com.fayu.message.domain.po.UserConversation;
@@ -127,6 +129,24 @@ public class SyncServerImpl implements ISyncServer {
                 userId, ack.getConversationId(), ack.getReadSeq()) > 0;
     }
 
+    @Override
+    public SyncBatchVO intervalSyncMessages(String deviceId, Long conversationId, Long start, Long end) {
+        Long userId = UserContext.getUser();
+        verify(start,end);
+        requireUserAndDevice(userId, deviceId);
+        requireMembership(userId, conversationId);
+        int pageSize = normalizeLimit(start,end);
+        List<SyncMessageVO> messages = messageMapper.intervalSyncMessages(
+                userId, conversationId, start, end,pageSize);
+        Long nextSeq = messages.isEmpty() ? end : messages.get(messages.size() - 1).getSeq();
+        return SyncBatchVO.builder()
+                .conversationId(conversationId)
+                .nextSeq(nextSeq)
+                .hasMore(messages.size() == pageSize)
+                .messages(messages)
+                .build();
+    }
+
     private DeviceSyncCursor getOrCreateCursor(Long userId, String deviceId, Long conversationId) {
         DeviceSyncCursor cursor = deviceSyncCursorMapper.findOne(userId, deviceId, conversationId);
         if (cursor != null) {
@@ -157,5 +177,17 @@ public class SyncServerImpl implements ISyncServer {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    private int normalizeLimit(Long start , Long end) {
+        if (end < start){
+            return DEFAULT_LIMIT;
+        }
+        return Math.toIntExact(end - start);
+    }
+    private void verify(Long start, Long end){
+        if (start == null || end == null || start <= 0 || start > end){
+            throw new BaseException("查询参数错误",400);
+        }
     }
 }

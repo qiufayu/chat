@@ -123,7 +123,7 @@ if (resultList != null) {
       </hashTree>
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="线程组">
         <intProp name="ThreadGroup.num_threads">100</intProp>
-        <intProp name="ThreadGroup.ramp_time">2</intProp>
+        <intProp name="ThreadGroup.ramp_time">1</intProp>
         <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器">
@@ -146,11 +146,11 @@ if (resultList != null) {
         <hashTree/>
         <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="仅一次控制器"/>
         <hashTree>
-          <eu.luminis.jmeter.wssampler.OpenWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.OpenWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler" testname="WebSocket Open Connection" enabled="true">
+          <eu.luminis.jmeter.wssampler.OpenWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.OpenWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler" testname="WebSocket Open Connection">
             <boolProp name="TLS">false</boolProp>
             <stringProp name="server">127.0.0.1</stringProp>
             <stringProp name="port">9000</stringProp>
-            <stringProp name="path">/ws?userId=${userId}</stringProp>
+            <stringProp name="path">/ws?userId=${userId}&amp;deviceId=jmeter-${userId}</stringProp>
             <stringProp name="connectTimeout">20000</stringProp>
             <stringProp name="readTimeout">6000</stringProp>
           </eu.luminis.jmeter.wssampler.OpenWebSocketSampler>
@@ -169,13 +169,11 @@ if (resultList != null) {
             <stringProp name="connectTimeout">20000</stringProp>
             <stringProp name="payloadType">Text</stringProp>
             <stringProp name="requestData">{
-  &quot;id&quot;: ${userId},
-  &quot;type&quot;: &quot;note&quot;,
-  &quot;senderId&quot;: ${userId},
+  &quot;type&quot;: &quot;CHAT&quot;,
   &quot;to&quot;: 4,
   &quot;clientMessageId&quot;: &quot;msg-${userId}-${__UUID()}&quot;,
-  &quot;timeAt&quot;: ${__time()},
   &quot;payload&quot;: {
+    &quot;contentType&quot;: &quot;TEXT&quot;,
     &quot;content&quot;: &quot;jmeter-${__UUID()}&quot;
   }
 }</stringProp>

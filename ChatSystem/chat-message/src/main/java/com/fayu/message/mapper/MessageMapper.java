@@ -20,4 +20,11 @@ public interface MessageMapper extends BaseMapper<Message> {
                                          @Param("conversationId") Long conversationId,
                                          @Param("afterSeq") Long afterSeq,
                                          @Param("limit") Integer limit);
+
+    List<SyncMessageVO> intervalSyncMessages(@Param("userId")Long userId,
+                                             @Param("conversationId") Long conversationId,
+                                             @Param("start") Long start,
+                                             @Param("end") Long end,
+                                             @Param("pageSize")int pageSize
+    );
 }
