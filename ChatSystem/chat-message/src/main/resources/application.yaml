@@ -78,6 +78,7 @@ chat:
       max_retry_count: 3
       multiplier: 1
       initial-interval: 1000ms
+      scan-interval: 5000ms
 
 logging:
   level:

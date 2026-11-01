@@ -1,131 +1,153 @@
 package com.fayu.connection.listener;
 
 import cn.hutool.core.bean.BeanUtil;
-import com.fayu.api.client.MsgClient;
-import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
 import com.fayu.common.domain.po.EventEnvelope;
 import com.fayu.common.domain.po.MessageMetadata;
-import com.fayu.common.constant.RabbitmqConstant;
-import com.fayu.common.exception.BaseException;
-import com.fayu.common.domain.dto.SaveOffMessageBoxDTO;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
-import com.fayu.connection.enums.EventType;
-import com.fayu.connection.enums.OffMsgStatus;
-import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
 import com.fayu.connection.utils.MessageUtil;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Collection;
+import java.util.Map;
 
-import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
-import static com.fayu.common.constant.RabbitmqConstant.*;
+import static com.fayu.common.constant.RabbitmqConstant.KEY_SEND_MESSAGE;
+import static com.fayu.common.constant.RabbitmqConstant.KEY_SENDER_SELF_SYNC;
+import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
+import static com.fayu.common.constant.RabbitmqConstant.SEND_MESSAGE_QUEUE;
+import static com.fayu.common.constant.RabbitmqConstant.SENDER_SELF_SYNC_QUEUE;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MessageListener {
+
     private final MessageUtil messageUtil;
-    private final MsgClient msgClient;
-    private final RabbitTemplate rabbitTemplate;
+
     @RabbitListener(
             bindings = @QueueBinding(
-                    value = @Queue(name = SEND_MESSAGE_QUEUE,durable = "true"),
-                    exchange = @Exchange(name = MESSAGE_EXCHANGE,type = "topic"),
+                    value = @Queue(name = SEND_MESSAGE_QUEUE, durable = "true"),
+                    exchange = @Exchange(name = MESSAGE_EXCHANGE, type = "topic"),
                     key = {KEY_SEND_MESSAGE}
             )
     )
-    public void sendMessageListener(EventEnvelope<?> eventEnvelope){
-        log.debug("mq 队列{}获取到消息{}，开始执行",SEND_MESSAGE_QUEUE,eventEnvelope);
-        SingleSession session = SingleSessionFactory.getSession();
-
+    public void sendMessageListener(EventEnvelope<?> eventEnvelope) {
+        if (eventEnvelope == null || eventEnvelope.getMetadata() == null) {
+            log.warn("收到空消息事件，忽略处理");
+            return;
+        }
         MessageMetadata metadata = eventEnvelope.getMetadata();
         Long toId = metadata.getToId();
         Long sendId = metadata.getSendId();
-        Long messageId = metadata.getMessageId();
-        if (toId == null ||sendId == null || messageId == null){
-            throw  new BaseException("服务错误，接收id不可以为空",500);
-        }
-        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(messageId);
-        Channel channel = session.getChannel(toId);
-        if (channel != null || !channel.isOpen()){
-            //log.info("添加重试信息......");
-            //updateStatusToRetry(metadata, eventKey, new BaseException("报错了",500));
-            log.debug("用户 {} 不在线拒绝推送....", toId);
-            //saveOffMsgToBox(metadata, toId);
+        if (toId == null || metadata.getMessageId() == null) {
+            log.warn("消息事件缺少接收者或消息编号，忽略处理: {}", eventEnvelope);
             return;
         }
-        Object payload = eventEnvelope.getPayload();
-        Long conversationId = metadata.getConversationId();
-        Integer messageType = metadata.getMessageType();
+
+        SingleSession session = SingleSessionFactory.getSession();
+        Collection<Channel> toChannels = session.getChannels(toId);
+        if (toChannels.isEmpty()) {
+            log.debug("用户 {} 不在线，等待重连同步 messageId={}", toId, metadata.getMessageId());
+            return;
+        }
+
         ChatResponseMessageVO<Object> messageVO = new ChatResponseMessageVO<>();
         BeanUtil.copyProperties(metadata, messageVO);
-        messageVO.setPayload(payload);
-        messageVO.setConversationId(conversationId);
-        messageVO.setMessageType(messageType);
-        String json = messageUtil.toJson(messageVO);
-        ChannelFuture channelFuture = channel.writeAndFlush(new TextWebSocketFrame(json))
-                .addListener(
-                future -> {
-                    if (future.isSuccess()){
-                        updateStatusToPass(metadata, eventKey);
-                    }else{
-                        Throwable cause = future.cause();
-                        log.error("消息推送失败，messageId={}，准备重试", messageId, cause);
-                        updateStatusToRetry(metadata, eventKey, cause);
-                    }
+        messageVO.setConversationId(metadata.getConversationId());
+        messageVO.setMessageType(metadata.getMessageType());
+        messageVO.setPayload(eventEnvelope.getPayload());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("type", "MESSAGE");
+        response.put("messageId", messageVO.getMessageId());
+        response.put("conversationId", messageVO.getConversationId());
+        response.put("seq", messageVO.getSeq());
+        response.put("sendId", messageVO.getSendId());
+        response.put("senderId", messageVO.getSendId());
+        response.put("toId", messageVO.getToId());
+        response.put("messageType", messageVO.getMessageType());
+        response.put("payload", messageVO.getPayload());
+        String json = messageUtil.toJson(response);
+        for (Channel channel : toChannels) {
+            if (!channel.isOpen()) {
+                continue;
+            }
+            channel.writeAndFlush(new TextWebSocketFrame(json)).addListener(future -> {
+                if (!future.isSuccess()) {
+                    log.warn("在线消息写入通道失败，等待设备游标补拉 messageId={}",
+                            metadata.getMessageId(), future.cause());
                 }
-        );
-
+            });
+        }
     }
 
-//    @RabbitListener(
-//            bindings = @QueueBinding(
-//                    value = @Queue(name = GET_OFF_MESSAGE_QUEUE,durable = "true"),
-//                    exchange = @Exchange(name = MESSAGE_EXCHANGE,type = "topic"),
-//                    key = {KEY_GET_OFF_MESSAGE}
-//            )
-//    )
-//    public void sendOffMessageListener(Long userId){
-//        while(true){
-//            msgClient.
-//        }
-//    }
+    @RabbitListener(
+            bindings = @QueueBinding(
+                    value = @Queue(name = SENDER_SELF_SYNC_QUEUE, durable = "true"),
+                    exchange = @Exchange(name = MESSAGE_EXCHANGE, type = "topic"),
+                    key = {KEY_SENDER_SELF_SYNC}
+            )
+    )
+    public void senderSelfSyncListener(EventEnvelope<?> eventEnvelope) {
+        if (eventEnvelope == null || eventEnvelope.getMetadata() == null) {
+            log.warn("收到发送者自同步空事件，忽略处理");
+            return;
+        }
+        MessageMetadata metadata = eventEnvelope.getMetadata();
+        Long sendId = metadata.getSendId();
+        if (sendId == null || metadata.getMessageId() == null) {
+            log.warn("发送者自同步事件缺少发送者或消息编号，忽略处理: {}", eventEnvelope);
+            return;
+        }
 
-    private void updateStatusToPass(MessageMetadata metadata, String eventKey) {
-        OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
-                .eventType(metadata.getEventType())
-                .eventKey(eventKey)
-                .status(OutboxStatusEnum.SENT.getCode())
-                .publishedAt(LocalDateTime.now())
-                .build();
-        // 修改outbox状态
-        msgClient.updateStatus(statusDTO);
+        SingleSession session = SingleSessionFactory.getSession();
+        Collection<Channel> senderChannels = session.getChannels(sendId);
+        if (senderChannels.isEmpty()) {
+            return;
+        }
+
+        ChatResponseMessageVO<Object> messageVO = new ChatResponseMessageVO<>();
+        BeanUtil.copyProperties(metadata, messageVO);
+        messageVO.setConversationId(metadata.getConversationId());
+        messageVO.setMessageType(metadata.getMessageType());
+        messageVO.setPayload(eventEnvelope.getPayload());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("type", "MESSAGE");
+        response.put("messageId", messageVO.getMessageId());
+        response.put("clientMessageId", metadata.getClientMessageId());
+        response.put("conversationId", messageVO.getConversationId());
+        response.put("seq", messageVO.getSeq());
+        response.put("sendId", messageVO.getSendId());
+        response.put("senderId", messageVO.getSendId());
+        response.put("toId", messageVO.getToId());
+        response.put("messageType", messageVO.getMessageType());
+        response.put("payload", messageVO.getPayload());
+        response.put("timestamp", metadata.getTimestamp());
+        String json = messageUtil.toJson(response);
+
+        for (Channel channel : senderChannels) {
+            if (!channel.isOpen()) {
+                continue;
+            }
+            String channelDeviceId = session.getDeviceId(channel);
+            if (channelDeviceId != null && channelDeviceId.equals(metadata.getDeviceId())) {
+                continue;
+            }
+            channel.writeAndFlush(new TextWebSocketFrame(json)).addListener(future -> {
+                if (!future.isSuccess()) {
+                    log.warn("自同步到发送者其他设备失败 messageId={}, deviceId={}",
+                            metadata.getMessageId(), channelDeviceId, future.cause());
+                }
+            });
+        }
     }
-    private void updateStatusToRetry(MessageMetadata metadata, String eventKey, Throwable lastError) {
-        OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
-                .eventType(metadata.getEventType())
-                .eventKey(eventKey)
-                .lastError(lastError.getMessage())
-                .publishedAt(LocalDateTime.now())
-                .build();
-        // 修改outbox状态
-        msgClient.updateStatusToRetry(statusDTO);
-    }
-
-
-
 }

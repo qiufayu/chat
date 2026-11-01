@@ -1,7 +1,9 @@
 package com.fayu.api.client;
 
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.common.domain.dto.DeliveryAckDTO;
 import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.dto.ReadAckDTO;
 import com.fayu.common.domain.dto.SaveMsgDTO;
 import com.fayu.api.domain.dto.VerifyMsgDTO;
 import com.fayu.common.domain.po.EventEnvelope;
@@ -9,6 +11,8 @@ import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.common.domain.vo.SaveMsgVO;
+import com.fayu.common.domain.vo.SyncBatchVO;
+import com.fayu.common.domain.vo.SyncSummaryVO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,5 +46,24 @@ public interface MsgClient {
 
     @PostMapping("/outbox/retry/unlock")
     void unlockRetry(@RequestParam("outboxId") Long outboxId, @RequestParam("lockedBy") String lockedBy);
+
+    @GetMapping("/sync/summary")
+    List<SyncSummaryVO> getSyncSummary(@RequestParam("userId") Long userId,
+                                       @RequestParam("deviceId") String deviceId);
+
+    @GetMapping("/sync/messages")
+    SyncBatchVO getSyncMessages(@RequestParam("userId") Long userId,
+                                @RequestParam("deviceId") String deviceId,
+                                @RequestParam("conversationId") Long conversationId,
+                                @RequestParam("afterSeq") Long afterSeq,
+                                @RequestParam("limit") Integer limit);
+
+    @PostMapping("/sync/delivery/ack")
+    boolean ackDelivery(@RequestParam("userId") Long userId,
+                        @RequestBody DeliveryAckDTO ack);
+
+    @PostMapping("/sync/read/ack")
+    boolean ackRead(@RequestParam("userId") Long userId,
+                    @RequestBody ReadAckDTO ack);
 
 }

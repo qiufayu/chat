@@ -5,11 +5,19 @@ import com.fayu.message.domain.po.Message;
 import com.fayu.message.domain.po.MessageInfoRow;
 import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
+import com.fayu.common.domain.vo.SyncMessageVO;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
 public interface MessageMapper extends BaseMapper<Message> {
     List<MessageOutbox> queryRetryMessages();
 
-    MessageInfoRow getMessageInfo(Long conversationId, Long seq);
+    MessageInfoRow getMessageInfo(@Param("conversationId") Long conversationId,
+                                  @Param("seq") Long seq);
+
+    List<SyncMessageVO> listSyncMessages(@Param("userId") Long userId,
+                                         @Param("conversationId") Long conversationId,
+                                         @Param("afterSeq") Long afterSeq,
+                                         @Param("limit") Integer limit);
 }

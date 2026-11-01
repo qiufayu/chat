@@ -20,6 +20,7 @@ import com.fayu.message.enums.EventType;
 import com.fayu.message.enums.OutboxStatusEnum;
 import com.fayu.message.enums.YesNoStatus;
 import com.fayu.message.mapper.MessageMapper;
+import com.fayu.message.mapper.DeviceSyncCursorMapper;
 import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IMessageOutboxServer;
 import com.fayu.message.server.IMessageServer;
@@ -48,6 +49,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
     private final MessageRetryProperties messageRetryProperties;
     private final IMessageOutboxServer messageOutboxServer;
     private final MessageMapper messageMapper;
+    private final DeviceSyncCursorMapper deviceSyncCursorMapper;
 
     @Override
     @Retryable(
@@ -76,6 +78,12 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         if (message != null){
             timeAt = message.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
             log.debug("重复消息 messageId = {}",message.getId());
+            // 客户端使用相同 clientMessageId 重试时，当前设备已经知道这条消息已保存，
+            // 不应因为重试请求而再次从同步接口拉取自己的消息。
+            if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
+                deviceSyncCursorMapper.advance(senderId, saveMsgDTO.getDeviceId(),
+                        message.getConversationId(), message.getSeq());
+            }
             return SaveMsgVO.builder()
                     .reuseMessage(true)
                     .messageId(message.getId())
@@ -102,7 +110,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .senderId(saveMsgDTO.getSenderId())
                 .messageType(saveMsgDTO.getMessageType())
                 .textContent(saveMsgDTO.getTextContent())
-                .attachmentId(null)
+                .attachmentId(saveMsgDTO.getAttachmentId())
                 .isBlocked(YesNoStatus.NO.getValue())
                 .recalledAt(null)
                 .isRecalled(YesNoStatus.NO.getValue())
@@ -145,6 +153,9 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
             messageOutboxServer.save(outbox);
         } catch (DuplicateKeyException e) {
             log.warn("消息合子已存在消息 messageId={}",message.getId());
+        }
+        if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
+            deviceSyncCursorMapper.advance(senderId, saveMsgDTO.getDeviceId(), conversationId, seq);
         }
         return SaveMsgVO.builder()
                 .messageId(message.getId())

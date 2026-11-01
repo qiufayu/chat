@@ -15,11 +15,6 @@ public enum OutboxStatusEnum {
     PENDING(0, "待发送"),
 
     /**
-     * 发送中
-     */
-    SENDING(1, "发送中"),
-
-    /**
      * 已发送
      */
     SENT(2, "已发送"),

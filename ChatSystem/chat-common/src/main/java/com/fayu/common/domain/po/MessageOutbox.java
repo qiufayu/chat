@@ -60,7 +60,7 @@ public class MessageOutbox implements Serializable {
     private String payload;
 
     /**
-     * 0待发送、1发送中、2已发送、3待重试、4最终失败
+     * 0待发送、2已发送、3待重试、4最终失败。历史数据中的1按待发送兼容；locked_at/locked_by 负责处理锁。
      */
     private Integer status;
 

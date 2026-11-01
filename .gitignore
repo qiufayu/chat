@@ -16,3 +16,6 @@ Thumbs.db
 
 # 秘钥文件
 *.jks
+
+# 测试前端文件
+temo/

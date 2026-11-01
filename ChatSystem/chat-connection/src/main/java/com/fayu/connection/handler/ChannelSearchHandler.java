@@ -1,11 +1,13 @@
 package com.fayu.connection.handler;
 
+import com.fayu.api.client.MsgClient;
+import com.fayu.common.domain.vo.SyncSummaryVO;
 import com.fayu.common.utils.UserContext;
 import com.fayu.connection.enums.MessageType;
-import com.fayu.connection.factory.GroupSessionFactory;
+import com.fayu.connection.executor.ChatBusinessExecutor;
 import com.fayu.connection.factory.SingleSessionFactory;
-import com.fayu.connection.session.GroupSession;
 import com.fayu.connection.session.SingleSession;
+import com.fayu.connection.utils.MessageUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -16,13 +18,13 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-
-import static com.fayu.common.constant.RabbitmqConstant.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -30,77 +32,126 @@ import static com.fayu.common.constant.RabbitmqConstant.*;
 @RequiredArgsConstructor
 public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
 
-    private final RabbitTemplate rabbitTemplate;
+    private final MsgClient msgClient;
+    private final ChatBusinessExecutor chatBusinessExecutor;
+    private final MessageUtil messageUtil;
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object o) throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object message) throws Exception {
         SingleSession session = SingleSessionFactory.getSession();
-        if (o instanceof TextWebSocketFrame ping){
-            if (MessageType.PING.toString().equals(ping.text())){
-                ctx.channel().writeAndFlush(new TextWebSocketFrame(MessageType.PONG.toString()));
-                log.debug("通道 userId={} 接收到心跳数据 PING 回写 PONG....",session.getUserId(ctx.channel()));
-                return;
-            }
+        if (message instanceof TextWebSocketFrame ping
+                && MessageType.PING.toString().equals(ping.text())) {
+            ctx.channel().writeAndFlush(new TextWebSocketFrame(MessageType.PONG.toString()));
+            log.debug("通道 userId={} 接收到心跳数据 PING 回写 PONG....", session.getUserId(ctx.channel()));
+            return;
         }
-        ctx.fireChannelRead(o);
+        ctx.fireChannelRead(message);
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        log.error("发生异常 主动断连：",cause);
+        log.error("发生异常，主动断连", cause);
         ctx.close();
     }
 
+    // 连接关闭时执行
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object env) throws Exception{
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        SingleSession session = SingleSessionFactory.getSession();
+        Long userId = session.getUserId(ctx.channel());
+        if (userId != null) {
+            session.unBind(ctx.channel(), userId);
+        }
+        super.channelInactive(ctx);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object env) throws Exception {
         SingleSession singleSession = SingleSessionFactory.getSession();
-        GroupSession groupSession = GroupSessionFactory.getSession();
         Channel channel = ctx.channel();
-        log.debug("====== 收到 UserEvent，类型是: env = {}",env!=null?env.getClass().getName():null);
-        if (env instanceof WebSocketServerProtocolHandler.HandshakeComplete){
-            WebSocketServerProtocolHandler.HandshakeComplete handshakeComplete = (WebSocketServerProtocolHandler.HandshakeComplete) env;
+        log.debug("====== 收到 UserEvent，类型是: env = {}",
+                env != null ? env.getClass().getName() : null);
+
+        if (env instanceof WebSocketServerProtocolHandler.HandshakeComplete handshakeComplete) {
             String requestUri = handshakeComplete.requestUri();
             Long userId = getUserIdFromUri(requestUri);
-            if (userId != null){
-                singleSession.setAttr(channel, "userId",userId);
-                singleSession.bind(channel,userId);
-                // TODO 拉取离线消息
-                rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_GET_OFF_MESSAGE,userId);
-                log.debug("WebSocket 握手成功！ 获取到 userId={}",userId);
+            String deviceId = getQueryParam(requestUri, "deviceId");
+            if (userId != null && deviceId != null && !deviceId.isBlank() && deviceId.length() <= 64) {
+                singleSession.setAttr(channel, "userId", userId);
+                singleSession.setAttr(channel, "deviceId", deviceId);
+                singleSession.bind(channel, userId, deviceId);
                 UserContext.setUser(userId);
-            }else {
-                log.error("WebSocket 握手失败！ uri={}",requestUri);
+                sendConnectionReady(channel, deviceId);
+                chatBusinessExecutor.execute(() -> sendSyncSummary(channel, userId, deviceId));
+                log.debug("WebSocket 握手成功！ userId={}, deviceId={}", userId, deviceId);
+            } else {
+                log.error("WebSocket 握手失败，userId 或 deviceId 无效！ uri={}", requestUri);
+                ctx.close();
             }
-        } else if (env instanceof IdleStateEvent) {
-            IdleStateEvent event = (IdleStateEvent) env;
+        } else if (env instanceof IdleStateEvent event) {
             Long userId = (Long) singleSession.getAttr(channel, "userId");
-            IdleState state = event.state();
-            if (state == IdleState.READER_IDLE){
-                if (event.isFirst()){
-                    log.warn("用户 userId={} 60秒没收到心跳了，发个探测包试试",userId);
-                }else {
-                    log.error("用户 userId={} 120秒没收到心跳，自动断开连接",userId);
-                    singleSession.unBind(channel,userId);
-                    // TODO 删除用户群通道
+            if (event.state() == IdleState.READER_IDLE) {
+                if (event.isFirst()) {
+                    log.warn("用户 userId={} 60秒没收到心跳了，发个探测包试试", userId);
+                } else {
+                    log.error("用户 userId={} 120秒没收到心跳，自动断开连接", userId);
+                    singleSession.unBind(channel, userId);
                     ctx.close();
                 }
             }
         }
-        super.userEventTriggered(ctx,env);
+        super.userEventTriggered(ctx, env);
     }
 
-    private Long getUserIdFromUri(String uriStr){
+    private void sendConnectionReady(Channel channel, String deviceId) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("type", "CONNECTION_READY");
+        response.put("deviceId", deviceId);
+        response.put("serverTime", System.currentTimeMillis());
+        channel.writeAndFlush(new TextWebSocketFrame(messageUtil.toJson(response)));
+    }
+
+    private void sendSyncSummary(Channel channel, Long userId, String deviceId) {
+        try {
+            List<SyncSummaryVO> summaries = msgClient.getSyncSummary(userId, deviceId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "SYNC_SUMMARY");
+            response.put("conversations", summaries);
+            channel.writeAndFlush(new TextWebSocketFrame(messageUtil.toJson(response)));
+        } catch (Exception e) {
+            log.error("发送同步摘要失败 userId={}, deviceId={}", userId, deviceId, e);
+        }
+    }
+
+    private Long getUserIdFromUri(String uriStr) {
+        String userId = getQueryParam(uriStr, "userId");
+        if (userId == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(userId);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("用户ID格式错误", e);
+        }
+    }
+
+    private String getQueryParam(String uriStr, String name) {
         try {
             URI uri = new URI(uriStr);
             String query = uri.getQuery();
-            if (query != null && query.contains("userId=")){
-                return Long.parseLong(query.split("userId=")[1].split("&")[0]);
+            if (query == null) {
+                return null;
             }
+            for (String pair : query.split("&")) {
+                String[] parts = pair.split("=", 2);
+                if (parts.length == 2 && name.equals(parts[0])) {
+                    return parts[1];
+                }
+            }
+            return null;
         } catch (URISyntaxException e) {
-            log.warn("解析 URI 获取 userId 失败, uri: {}, 错误信息: {}", uriStr, e.getMessage());
+            log.warn("解析 URI 获取参数失败, uri: {}, 错误信息: {}", uriStr, e.getMessage());
             throw new IllegalArgumentException("非法的 WebSocket 连接 URI: " + uriStr, e);
         }
-        return null;
     }
-
 }

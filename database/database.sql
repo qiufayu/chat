@@ -143,7 +143,7 @@ CREATE TABLE `message_outbox` (
     `event_type` VARCHAR(64) NOT NULL COMMENT '事件类型，例如MESSAGE_CREATED',
     `event_key` VARCHAR(128) NOT NULL COMMENT '事件唯一编号，用于幂等',
     `payload` JSON NOT NULL COMMENT '发送给消息队列的事件内容',
-    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0待发送、1发送中、2已发送、3待重试、4最终失败',
+      `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0待发送、2已发送、3待重试、4最终失败；历史1按待发送兼容，处理锁由 locked_at/locked_by 表示',
     `retry_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '重试次数',
     `next_retry_at` DATETIME(3) DEFAULT NULL COMMENT '下一次重试时间',
     `last_error` VARCHAR(500) DEFAULT NULL COMMENT '最近一次失败原因',

@@ -7,6 +7,7 @@ import lombok.Data;
 @Builder
 public class SaveMsgDTO {
     private Long senderId;
+    private String deviceId;
     private Long toId;
     private String clientMessageId;
     private Integer messageType;

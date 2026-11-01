@@ -32,8 +32,30 @@
             m.is_blocked        AS isBlocked
         FROM message m
                  INNER JOIN conversation c ON c.id = m.conversation_id
-        WHERE m.conversation_id = 268
-          AND m.seq = 5
+        WHERE m.conversation_id = #{conversationId}
+          AND m.seq = #{seq}
         LIMIT 1
+    </select>
+
+    <select id="listSyncMessages" resultType="com.fayu.common.domain.vo.SyncMessageVO">
+        SELECT
+            m.id              AS messageId,
+            m.conversation_id AS conversationId,
+            m.seq             AS seq,
+            m.sender_id       AS senderId,
+            m.message_type    AS messageType,
+            m.text_content    AS textContent,
+            m.attachment_id   AS attachmentId,
+            m.is_recalled     AS isRecalled,
+            m.is_blocked      AS isBlocked,
+            m.created_at      AS createdAt
+        FROM message m
+        INNER JOIN user_conversation uc
+            ON uc.conversation_id = m.conversation_id
+           AND uc.user_id = #{userId}
+        WHERE m.conversation_id = #{conversationId}
+          AND m.seq &gt; #{afterSeq}
+        ORDER BY m.seq ASC
+        LIMIT #{limit}
     </select>
 </mapper>

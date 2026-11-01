@@ -21,4 +21,7 @@ public class RabbitmqConstant {
     public static final String GET_OFF_MESSAGE_QUEUE = "get.off.message.queue";
     public static final String KEY_GET_OFF_MESSAGE = "get.off.message";
 
+    public static final String SENDER_SELF_SYNC_QUEUE = "sender.self.sync.queue";
+    public static final String KEY_SENDER_SELF_SYNC = "sender.self.sync";
+
 }

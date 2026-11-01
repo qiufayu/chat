@@ -1,6 +1,5 @@
 package com.fayu.message.server.impl;
 
-import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
@@ -8,7 +7,6 @@ import com.fayu.message.config.MessageRetryProperties;
 import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
 import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.message.enums.OutboxStatusEnum;
-import com.fayu.message.mapper.MessageMapper;
 import com.fayu.message.mapper.MessageOutboxMapper;
 import com.fayu.message.server.IMessageOutboxServer;
 import lombok.RequiredArgsConstructor;
@@ -49,7 +47,7 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
             return false;
         }
         log.debug("outbox 状态修改成功 eventType={},eventKey={}",eventType,eventKey);
-        LocalDateTime updateAt = statusDTO.getPublishedAt() == null ? LocalDateTime.now() : statusDTO.getPublishedAt();
+        LocalDateTime updateAt = LocalDateTime.now();
         return lambdaUpdate()
                 .eq(MessageOutbox::getEventKey, eventKey)
                 .eq(MessageOutbox::getEventType, eventType)
@@ -79,8 +77,13 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
             log.error("outbox 不存在 ,eventType={},eventKey={}",eventType,eventKey);
             return false;
         }
+        if (Objects.equals(outbox.getStatus(), OutboxStatusEnum.SENT.getCode())) {
+            // 迟到的失败回调不能把已经确认成功的事件重新置为重试。
+            return true;
+        }
         Integer currentStatus = outbox.getStatus();
-        Integer newRetryCount = outbox.getRetryCount() == null ? 0 : outbox.getRetryCount();
+        Integer currentRetryCount = outbox.getRetryCount() == null ? 0 : outbox.getRetryCount();
+        Integer newRetryCount = currentRetryCount + 1;
 
         LambdaUpdateChainWrapper<MessageOutbox> wrapper = lambdaUpdate()
                 .eq(MessageOutbox::getEventKey, eventKey)
@@ -88,7 +91,9 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
                 .eq(MessageOutbox::getStatus, currentStatus)
                 .set(MessageOutbox::getRetryCount, newRetryCount)
                 .set(MessageOutbox::getLastError, statusDTO.getLastError())
-                .set(MessageOutbox::getUpdatedAt, LocalDateTime.now());
+                .set(MessageOutbox::getUpdatedAt, LocalDateTime.now())
+                .set(MessageOutbox::getLockedAt, null)
+                .set(MessageOutbox::getLockedBy, null);
         // 达到最大重试次数
         if (newRetryCount >= messageRetryProperties.getMaxRetryCount()){
             wrapper.set(MessageOutbox::getStatus,OutboxStatusEnum.FAILED.getCode())
@@ -97,7 +102,7 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
         }else {
 
             long nextInterval = getNextInterval(newRetryCount);
-            LocalDateTime nextRetryAt = LocalDateTime.now().plusMinutes(nextInterval);
+            LocalDateTime nextRetryAt = LocalDateTime.now().plusNanos(nextInterval * 1_000_000L);
             wrapper.set(MessageOutbox::getStatus,OutboxStatusEnum.RETRY_WAIT.getCode())
                     .set(MessageOutbox::getNextRetryAt,nextRetryAt);
         }
@@ -111,32 +116,13 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
 
     @Override
     public List<MessageOutbox> getRetryLists() {
-        List<Long> idList = lambdaQuery()
-                .select(MessageOutbox::getId)
-                .eq(MessageOutbox::getStatus, OutboxStatusEnum.RETRY_WAIT.getCode())
-                .isNull(MessageOutbox::getLockedAt)
-                .le(MessageOutbox::getNextRetryAt, LocalDateTime.now())
-                .last("limit 100")
-                .list().stream()
-                .map(MessageOutbox::getId)
-                .toList();
-        if (CollUtil.isEmpty(idList)){
-            return List.of();
-        }
-        return listByIds(idList);
+        LocalDateTime now = LocalDateTime.now();
+        return baseMapper.findDispatchCandidates(now, now.minusMinutes(5), 100);
     }
 
     @Override
     public boolean getRetryLock(Long outboxId, String lockedBy) {
-        return lambdaUpdate()
-                .eq(MessageOutbox::getId,outboxId)
-                .eq(MessageOutbox::getStatus,OutboxStatusEnum.RETRY_WAIT)
-                .isNull(MessageOutbox::getLockedAt)
-                .isNull(MessageOutbox::getLockedBy)
-                .set(MessageOutbox::getLockedAt,LocalDateTime.now())
-                .set(MessageOutbox::getLockedBy,lockedBy)
-                .set(MessageOutbox::getUpdatedAt,LocalDateTime.now())
-                .update();
+        return baseMapper.claim(outboxId, lockedBy, LocalDateTime.now().minusMinutes(5)) > 0;
     }
 
     @Override
@@ -155,7 +141,7 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
         long initialMs = initialInterval.toMillis();
         long nextInterval;
         // 第一次设置初始的重试时间
-        if (retryCount == 1){
+        if (retryCount <= 1){
             nextInterval = initialMs;
         }else{
             double calculatedMs = initialMs * Math.pow(multiplier, retryCount - 1);

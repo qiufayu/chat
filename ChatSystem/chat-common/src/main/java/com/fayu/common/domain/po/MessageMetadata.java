@@ -24,6 +24,7 @@ public class MessageMetadata {
     private Long seq;
     private Long timestamp;
 
-    private String traceId;
+    private String deviceId;
+
     private boolean isReuseMessage;
 }
