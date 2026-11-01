@@ -12,4 +12,5 @@ public interface IConversationServer extends IService<Conversation> {
     void initFriendConversation(Long userId1, Long userId2);
 
     void updateConversation(UpdateConversationDTO dto);
+
 }

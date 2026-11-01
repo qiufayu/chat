@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.fayu.message.mapper.ConversationMapper"/>
+<mapper namespace="com.fayu.message.mapper.ConversationMapper">
+    <select id="selectConversationSeqOfDevice"
+            resultType="com.fayu.message.domain.vo.ConversationSeqOfDeviceVO">
+    select dsc.conversation_id, dsc.device_id , c.last_seq , dsc.last_synced_seq
+    from device_sync_cursor as dsc join conversation as c on dsc.conversation_id = c.id
+    where dsc.user_id = #{userId}
+      and device_id = #{deviceId}
+        <if test="conversationIds != null and conversationIds.size() > 0">
+            and c.id in
+            <foreach collection="conversationIds" item="cid" separator="," open="(" close=")">
+                #{cid}
+            </foreach>
+        </if>
+    </select>
+</mapper>

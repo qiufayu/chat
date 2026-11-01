@@ -22,7 +22,7 @@ public class ConversationListener {
 
     @RabbitListener(
             bindings = @QueueBinding(
-                    value = @Queue(name = CONVERSATION_UPDATE_QUEUE,declare = "true",durable = "true"),
+                    value = @Queue(name = CONVERSATION_QUEUE,declare = "true",durable = "true"),
                     exchange = @Exchange(name = MESSAGE_EXCHANGE,type = ExchangeTypes.TOPIC),
                     key = {KEY_UPDATE_CONVERSATION}
             )

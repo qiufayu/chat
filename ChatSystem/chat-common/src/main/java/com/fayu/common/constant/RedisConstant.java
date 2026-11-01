@@ -21,4 +21,10 @@ public class RedisConstant {
      */
     public static String LOGIN_ACCESS_TOKEN = PREFIX + "login:access:token:";
     public static String LOGIN_REFRESH_TOKEN = PREFIX + "login:refresh:token:";
+
+    /**
+     * cache
+     */
+    public static String SINGLE_CONVERSATION_ID = PREFIX + "user_pair:" + "%s_%s";
+    public static String GROUP_CONVERSATION_ID = PREFIX + "group:" + "%s";
 }

@@ -2,14 +2,18 @@ package com.fayu.message.server.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
 import com.fayu.message.config.MessageRetryProperties;
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
+import com.fayu.message.domain.dto.AdvanceDeviceCursorDTO;
 import com.fayu.message.domain.dto.MessagePayloadDTO;
 import com.fayu.common.domain.dto.SaveMsgDTO;
 import com.fayu.message.domain.dto.UpdateConversationDTO;
+import com.fayu.message.domain.po.Conversation;
 import com.fayu.message.domain.po.Message;
 import com.fayu.message.domain.po.MessageInfoRow;
 import com.fayu.common.domain.po.MessageOutbox;
@@ -26,8 +30,10 @@ import com.fayu.message.server.IMessageOutboxServer;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
@@ -37,7 +43,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
+import static com.fayu.common.constant.RabbitmqConstant.*;
 import static com.fayu.common.constant.RedisConstant.SEQ_INC;
+import static com.fayu.common.constant.RedisConstant.SINGLE_CONVERSATION_ID;
 
 @Slf4j
 @Service
@@ -50,6 +58,8 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
     private final IMessageOutboxServer messageOutboxServer;
     private final MessageMapper messageMapper;
     private final DeviceSyncCursorMapper deviceSyncCursorMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final RabbitTemplate rabbitTemplate;
 
     @Override
     @Retryable(
@@ -93,49 +103,75 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                     .build();
         }
 
-        LocalDateTime now = null;
-        ConversationVO conversation = conversationServer.getConversation(toId, senderId, null);
-        if (conversation == null){
-            throw new BaseException("获取会话失败",500);
-        }
-        log.debug("toId={} -> sendId={} 获取到会话conversationId={}",toId,senderId,conversation.getConversationId());
 
-        Long conversationId = conversation.getConversationId();
+        ConversationVO conversation;
+        Long conversationId;
+        Long oldLastSeq;
+        Long lowId = Math.min(toId,senderId);
+        Long highId = Math.max(toId,senderId);
+        String key = SINGLE_CONVERSATION_ID.formatted(lowId,highId);
+        Object obj = stringRedisTemplate.opsForHash().get(key, "conversationId");
+        if (obj == null){
+            conversation = conversationServer.getConversation(toId, senderId, null);
+            if (conversation == null){
+                throw new BaseException("获取会话失败",500);
+            }
+            conversationId =conversation.getConversationId();
+            oldLastSeq = conversation.getLastSeq();
+            log.debug("缓存获取失败，查询数据库 conversationId={} oldLastSeq={}",conversationId,oldLastSeq);
+        }else {
+            conversationId = Long.valueOf(obj.toString());
+            String oldLastSeqStr = stringRedisTemplate.opsForValue().get(SEQ_INC.formatted(conversationId));
+            if (oldLastSeqStr == null) {
+                Long dbMaxSeq = messageMapper.selectMaxSeqByConversationId(conversationId);
+                oldLastSeq = (dbMaxSeq == null) ? 0L : dbMaxSeq;
+                // 顺便把查到的值写回 Redis，防止下次再查库
+                stringRedisTemplate.opsForValue().setIfAbsent(SEQ_INC.formatted(conversationId), oldLastSeq.toString());
+            } else {
+                oldLastSeq = Long.parseLong(oldLastSeqStr);
+            }
+            log.debug("查询到缓存 conversationId={} oldLastSeq={}",conversationId,oldLastSeq);
+        }
+
+        log.debug("toId={} -> sendId={} 获取到会话conversationId={}",toId,senderId,conversationId);
         Long seq = redisIdWorker.msgSeqIncrease(SEQ_INC.formatted(conversationId));
-        now = LocalDateTime.now();
-        message = Message.builder()
-                .clientMessageId(clientMessageId)
-                .conversationId(conversationId)
-                .seq(seq)
-                .senderId(saveMsgDTO.getSenderId())
-                .messageType(saveMsgDTO.getMessageType())
-                .textContent(saveMsgDTO.getTextContent())
-                .attachmentId(saveMsgDTO.getAttachmentId())
-                .isBlocked(YesNoStatus.NO.getValue())
-                .recalledAt(null)
-                .isRecalled(YesNoStatus.NO.getValue())
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
+        LocalDateTime now = LocalDateTime.now();
+        message = builderMessage(conversationId, seq, saveMsgDTO, now);
         try {
             save(message);
         } catch (DuplicateKeyException e) {
             log.warn("消息已存在 sendId={},client_message_id={}",senderId,clientMessageId);
             throw e;
         }
+
+        // 异步创建会话和outbox
+        sendConversationUpdateEvent(conversationId, oldLastSeq, seq, message, now);
+        sendMessageOutboxCreateEvent(message, conversationId, seq);
+
+        if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
+            sendAdvanceDeviceCursorEvent(senderId, saveMsgDTO.getDeviceId(), conversationId, seq);
+        }
+
+        return SaveMsgVO.builder()
+                .messageId(message.getId())
+                .reuseMessage(false)
+                .seq(message.getSeq())
+                .conversationId(message.getConversationId())
+                .timeAt(now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                .build();
+    }
+    private void sendAdvanceDeviceCursorEvent(Long userId, String deviceId, Long conversationId, Long seq) {
+        AdvanceDeviceCursorDTO event = AdvanceDeviceCursorDTO.builder()
+                .userId(userId)
+                .deviceId(deviceId)
+                .conversationId(conversationId)
+                .seq(seq)
+                .build();
+        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE, KEY_ADVANCE_DEVICE_CURSOR, event);
+    }
+    private void sendMessageOutboxCreateEvent(Message message, Long conversationId, Long seq) {
         MessagePayloadDTO payloadDTO = BeanUtil.copyProperties(message, MessagePayloadDTO.class);
         String jsonPayload = JSON.toJSONString(payloadDTO);
-
-        UpdateConversationDTO conversationDTO = UpdateConversationDTO.builder()
-                .conversationId(conversationId)
-                .oldLastSeq(conversation.getLastSeq())
-                .newLastSeq(seq)
-                .lastMessageId(message.getId())
-                .lastMessageAt(now)
-                .build();
-
-        conversationServer.updateConversation(conversationDTO);
-
         MessageOutbox outbox = MessageOutbox.builder()
                 .messageId(message.getId())
                 .conversationId(conversationId)
@@ -148,21 +184,35 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KET_CREATE_OUTBOX,outbox);
+    }
 
-        try {
-            messageOutboxServer.save(outbox);
-        } catch (DuplicateKeyException e) {
-            log.warn("消息合子已存在消息 messageId={}",message.getId());
-        }
-        if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
-            deviceSyncCursorMapper.advance(senderId, saveMsgDTO.getDeviceId(), conversationId, seq);
-        }
-        return SaveMsgVO.builder()
-                .messageId(message.getId())
-                .reuseMessage(false)
-                .seq(message.getSeq())
-                .conversationId(message.getConversationId())
-                .timeAt(now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+    private void sendConversationUpdateEvent(Long conversationId, Long oldLastSeq, Long seq, Message message, LocalDateTime now) {
+        UpdateConversationDTO conversationDTO = UpdateConversationDTO.builder()
+                .conversationId(conversationId)
+                .oldLastSeq(oldLastSeq)
+                .newLastSeq(seq)
+                .lastMessageId(message.getId())
+                .lastMessageAt(now)
+                .build();
+        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_UPDATE_CONVERSATION,conversationDTO);
+    }
+
+    private Message builderMessage(Long conversationId, Long seq, SaveMsgDTO saveMsgDTO, LocalDateTime now) {
+        now = LocalDateTime.now();
+        return  Message.builder()
+                .clientMessageId(saveMsgDTO.getClientMessageId())
+                .conversationId(conversationId)
+                .seq(seq)
+                .senderId(saveMsgDTO.getSenderId())
+                .messageType(saveMsgDTO.getMessageType())
+                .textContent(saveMsgDTO.getTextContent())
+                .attachmentId(saveMsgDTO.getAttachmentId())
+                .isBlocked(YesNoStatus.NO.getValue())
+                .recalledAt(null)
+                .isRecalled(YesNoStatus.NO.getValue())
+                .createdAt(now)
+                .updatedAt(now)
                 .build();
     }
 
@@ -195,4 +245,5 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         }
         return vo;
     }
+
 }

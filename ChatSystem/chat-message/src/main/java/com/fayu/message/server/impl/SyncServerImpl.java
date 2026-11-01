@@ -12,6 +12,7 @@ import com.fayu.common.utils.UserContext;
 import com.fayu.message.domain.po.Conversation;
 import com.fayu.message.domain.po.DeviceSyncCursor;
 import com.fayu.message.domain.po.UserConversation;
+import com.fayu.message.domain.vo.ConversationSeqOfDeviceVO;
 import com.fayu.message.mapper.ConversationMapper;
 import com.fayu.message.mapper.DeviceSyncCursorMapper;
 import com.fayu.message.mapper.MessageMapper;
@@ -24,6 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -46,18 +50,26 @@ public class SyncServerImpl implements ISyncServer {
                         .eq(UserConversation::getUserId, userId)
         );
         List<SyncSummaryVO> result = new ArrayList<>(conversations.size());
-        for (UserConversation userConversation : conversations) {
-            Conversation conversation = conversationMapper.selectById(userConversation.getConversationId());
-            if (conversation == null) {
-                continue;
+        List<Long> conversationIds = conversations.stream().map(UserConversation::getConversationId).toList();
+        List<ConversationSeqOfDeviceVO> seqOfDeviceVOS = conversationMapper.selectConversationSeqOfDevice(userId, deviceId, conversationIds);
+        Map<Long, ConversationSeqOfDeviceVO> ofDeviceVOMap = seqOfDeviceVOS.stream()
+                .filter(vo -> vo != null && vo.getConversationId() != null)
+                .collect(Collectors.toMap(
+                        ConversationSeqOfDeviceVO::getConversationId,
+                        v -> v, (existing,
+                                 replacement) -> existing)
+                );
+        for (UserConversation conversation : conversations) {
+            Long conversationId = conversation.getConversationId();
+            ConversationSeqOfDeviceVO vo = ofDeviceVOMap.get(conversationId);
+            long lastSeq = 0L;
+            long lastSyncedSeq = 0L;
+            if (vo != null){
+                lastSeq = vo.getLastSeq() == null ? 0L : vo.getLastSeq();
+                lastSyncedSeq = vo.getLastSyncedSeq() == null ? 0L : vo.getLastSyncedSeq();
             }
-            DeviceSyncCursor cursor = deviceSyncCursorMapper.findOne(
-                    userId, deviceId, userConversation.getConversationId());
-            long lastSyncedSeq = cursor == null || cursor.getLastSyncedSeq() == null
-                    ? 0L : cursor.getLastSyncedSeq();
-            long lastSeq = conversation.getLastSeq() == null ? 0L : conversation.getLastSeq();
             result.add(SyncSummaryVO.builder()
-                    .conversationId(conversation.getId())
+                    .conversationId(conversationId)
                     .lastSeq(lastSeq)
                     .lastSyncedSeq(lastSyncedSeq)
                     .pendingCount(Math.max(0L, lastSeq - lastSyncedSeq))

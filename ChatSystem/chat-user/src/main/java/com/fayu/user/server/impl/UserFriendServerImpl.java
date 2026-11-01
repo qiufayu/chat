@@ -1,6 +1,7 @@
 package com.fayu.user.server.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fayu.api.client.MsgClient;
 import com.fayu.api.domain.dto.VerifyMsgDTO;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
@@ -15,6 +16,8 @@ import com.fayu.user.server.IUserFriendServer;
 import com.fayu.user.server.IUserServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cloud.bootstrap.encrypt.KeyProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +33,8 @@ public class UserFriendServerImpl extends ServiceImpl<UserFriendMapper, UserFrie
 
     private final IUserServer userServer;
     private final RedisIdWorker redisIdWorker;
+    private final RabbitTemplate rabbitTemplate;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void apply(ApplyFormDTO applyFormDTO) {
@@ -81,4 +86,6 @@ public class UserFriendServerImpl extends ServiceImpl<UserFriendMapper, UserFrie
         // TODO 缓存好友关系
         return true;
     }
+
+
 }

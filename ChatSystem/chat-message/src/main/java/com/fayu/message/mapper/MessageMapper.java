@@ -27,4 +27,6 @@ public interface MessageMapper extends BaseMapper<Message> {
                                              @Param("end") Long end,
                                              @Param("pageSize")int pageSize
     );
+
+    Long selectMaxSeqByConversationId(@Param("conversationId") Long conversationId);
 }

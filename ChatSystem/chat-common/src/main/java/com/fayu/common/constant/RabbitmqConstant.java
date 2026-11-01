@@ -5,11 +5,9 @@ public class RabbitmqConstant {
     public static final String GROUP_EXCHANGE = "group.topic";
     public static final String KEY_ADD_MEMBER = "add.member";
 
-    public static final String CONVERSATION_UPDATE_QUEUE = "conversation.update.queue";
     public static final String SEND_MESSAGE_QUEUE = "send.message.queue";
 
     public static final String MESSAGE_EXCHANGE = "message.exchange";
-    public static final String KEY_UPDATE_CONVERSATION = "update.conversation";
     public static final String KEY_SEND_MESSAGE = "send.message";
 
     public static final String RETRY_MESSAGE_QUEUE = "retry.message.queue";
@@ -23,5 +21,18 @@ public class RabbitmqConstant {
 
     public static final String SENDER_SELF_SYNC_QUEUE = "sender.self.sync.queue";
     public static final String KEY_SENDER_SELF_SYNC = "sender.self.sync";
+
+    public static final String OUTBOX_QUEUE = "outbox.queue";
+    public static final String KET_CREATE_OUTBOX = "create.outbox";
+
+    public static final String CONVERSATION_QUEUE = "conversation.queue";
+    public static final String KEY_UPDATE_CONVERSATION = "update.conversation";
+
+    public static final String USER_CONVERSATION_QUEUE = "user.conversation.queue";
+    public static final String KEY_CREATE_USER_CONVERSATION = "create.user.conversation";
+
+    public static final String DEVICE_SYNC_CURSOR_QUEUE = "device.sync.cursor.queue";
+    public static final String KEY_ADVANCE_DEVICE_CURSOR = "advance.device.cursor";
+
 
 }

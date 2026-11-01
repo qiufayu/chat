@@ -80,4 +80,11 @@
         ORDER BY m.seq ASC
         LIMIT #{pageSize}
     </select>
+    <select id="selectMaxSeqByConversationId" resultType="java.lang.Long">
+        select seq
+        from message
+        where conversation_id = #{conversationId}
+        order BY seq DESC
+        limit 1
+    </select>
 </mapper>

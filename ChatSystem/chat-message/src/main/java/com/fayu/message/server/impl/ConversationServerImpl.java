@@ -19,14 +19,19 @@ import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IUserConversationServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
+
+import static com.fayu.common.constant.RabbitmqConstant.KEY_CREATE_USER_CONVERSATION;
+import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
+import static com.fayu.common.constant.RedisConstant.GROUP_CONVERSATION_ID;
+import static com.fayu.common.constant.RedisConstant.SINGLE_CONVERSATION_ID;
 
 @Slf4j
 @Service
@@ -35,10 +40,13 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
 
     private final IUserConversationServer userConversationServer;
     private final RedisIdWorker redisIdWorker;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final RabbitTemplate rabbitTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO getConversation(Long sendId, Long toId , Long groupId) {
+        log.debug("查询数据库获取会话信息 sendId={} toId={} groupId={}",sendId,toId,groupId);
         LambdaQueryChainWrapper<Conversation> wrapper = lambdaQuery();
         Long lowId = null;
         Long highId = null;
@@ -55,8 +63,8 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
             throw new BaseException("参数错误",500);
         }
         Conversation conversation = wrapper.one();
+        int conversationType = groupId != null ? ConversationType.GROUP.getValue() : ConversationType.SINGLE.getValue();
         if (conversation == null){
-            int conversationType = groupId != null ? ConversationType.GROUP.getValue() : ConversationType.SINGLE.getValue();
             conversation = new Conversation();
             conversation.setConversationType(conversationType)
                     .setStatus(ConversationStatus.NORMAL.getValue())
@@ -72,6 +80,7 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
             boolean flag = false;
             try {
                 flag = save(conversation);
+
             } catch (DuplicateKeyException e) {
                 log.warn("并发创建会话冲突，重新查询: lowId={}, highId={}......", lowId, highId);
                 throw e;
@@ -82,21 +91,31 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
 //                }
             }
             if (flag){
-                ArrayList<UserConversation> userConversations = new ArrayList<>();
-                Long conversationId = conversation.getId();
-                userConversations.add(createUserConversation(conversationId, sendId));
-                userConversations.add(createUserConversation(conversationId, toId));
-                boolean pass = userConversationServer.saveBatch(userConversations);
-                    if (!pass){
-                        throw new BaseException("业务错误",500);
-                    }
-                    log.debug("创建用户会话 userId1={} , userId2={}",toId,sendId);
+                crateUserConversationEvent(sendId, toId, conversation);
             }
         }
+        // 添加缓存
+        if (ConversationType.SINGLE.getValue() == conversationType){
+            saveConversationCache(conversation.getId(),lowId,highId);
+        }else{
+            saveConversationCache(conversation.getId(),groupId);
+        }
+        log.debug("添加缓存成功 conversationId={}",conversation.getId());
+
         ConversationVO conversationVO = BeanUtil.copyProperties(conversation, ConversationVO.class);
         conversationVO.setConversationId(conversation.getId());
         return conversationVO;
     }
+
+    private void crateUserConversationEvent(Long sendId, Long toId, Conversation conversation) {
+        ArrayList<UserConversation> userConversations = new ArrayList<>();
+        Long conversationId = conversation.getId();
+        userConversations.add(createUserConversation(conversationId, sendId));
+        userConversations.add(createUserConversation(conversationId, toId));
+        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_CREATE_USER_CONVERSATION,userConversations);
+    }
+
+
     @Override
     public void initFriendConversation(Long userId1, Long userId2) {
 
@@ -150,5 +169,14 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
                 .build();
     }
 
+    private void saveConversationCache(Long conversationId, Long groupId) {
+        String key = GROUP_CONVERSATION_ID.formatted(groupId);
+        stringRedisTemplate.opsForHash().put(key,"conversationId",conversationId.toString());
+    }
+
+    private void saveConversationCache(Long conversationId, Long lowId, Long highId) {
+        String key = SINGLE_CONVERSATION_ID.formatted(lowId,highId);
+        stringRedisTemplate.opsForHash().put(key,"conversationId",conversationId.toString());
+    }
 
 }
