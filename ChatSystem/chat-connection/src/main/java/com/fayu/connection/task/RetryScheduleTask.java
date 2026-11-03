@@ -37,7 +37,7 @@ public class RetryScheduleTask {
     private final RabbitTemplate rabbitTemplate;
     private final MessageUtil messageUtil;
 
-    // @Scheduled(fixedDelayString = "${chat.msg.retry.scan-interval:5000}")
+    @Scheduled(fixedDelayString = "${chat.msg.retry.scan-interval:5000}")
     public void retryScheduleTask() {
         List<MessageOutbox> dispatchList = msgClient.getRetryLists();
         if (dispatchList.isEmpty()) {
@@ -65,8 +65,7 @@ public class RetryScheduleTask {
                 log.warn("消息不存在，重新插入消息，OutboxId: {}", outbox.getId());
                 // 重新插入消息
                 retryInsertMessageAndUpdateConversation(outbox);
-                updateStatusToRetry(outbox, "消息不存在");
-                return;
+                messageInfo = msgClient.getMessageInfo(outbox.getConversationId(), outbox.getSeq());
             }
 
             MessageMetadata metadata = MessageMetadata.builder()
@@ -125,7 +124,6 @@ public class RetryScheduleTask {
         JsonNode payload = messageUtil.toJsonNode(outbox.getPayload());
 
         Integer messageType = payload.get("messageType").intValue();
-
 
         SaveMsgAndUpdateConversationDTO dto = SaveMsgAndUpdateConversationDTO.builder()
                 .clientMessageId(clientMessageId)

@@ -5,6 +5,7 @@ import cn.hutool.core.util.ObjUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
 import com.fayu.common.domain.dto.SaveMsgAndUpdateConversationDTO;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
@@ -34,6 +35,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,7 +61,6 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
     private final DeviceSyncCursorMapper deviceSyncCursorMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final RabbitTemplate rabbitTemplate;
-
     @Override
     public SaveMsgVO saveOutbox(SaveOutboxDTO saveOutboxDTO) {
 //        Long userId = UserContext.getUser();
@@ -122,16 +124,22 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
             log.debug("缓存获取失败，查询数据库 conversationId={} oldLastSeq={}",conversationId,oldLastSeq);
         }else {
             conversationId = Long.valueOf(obj.toString());
-            String oldLastSeqStr = stringRedisTemplate.opsForValue().get(SEQ_INC.formatted(conversationId));
-            if (oldLastSeqStr == null) {
-                Long dbMaxSeq = messageMapper.selectMaxSeqByConversationId(conversationId);
-                oldLastSeq = (dbMaxSeq == null) ? 0L : dbMaxSeq;
-                // 顺便把查到的值写回 Redis，防止下次再查库
-                stringRedisTemplate.opsForValue().setIfAbsent(SEQ_INC.formatted(conversationId), oldLastSeq.toString());
-            } else {
-                oldLastSeq = Long.parseLong(oldLastSeqStr);
+            try {
+                String oldLastSeqStr = stringRedisTemplate.opsForValue().get(SEQ_INC.formatted(conversationId));
+                if (oldLastSeqStr == null) {
+                    Long dbMaxSeq = messageMapper.selectMaxSeqByConversationId(conversationId);
+                    oldLastSeq = (dbMaxSeq == null) ? 0L : dbMaxSeq;
+                    // 顺便把查到的值写回 Redis，防止下次再查库
+                    stringRedisTemplate.opsForValue().setIfAbsent(SEQ_INC.formatted(conversationId), oldLastSeq.toString());
+                } else {
+                    oldLastSeq = Long.parseLong(oldLastSeqStr);
+                }
+                log.debug("查询到缓存 conversationId={} oldLastSeq={}",conversationId,oldLastSeq);
+            } catch (RedisConnectionFailureException e) {
+                // Redis 连接失败（下线、网络不通、端口错误等），执行你的兜底逻辑
+                log.warn("Redis 连接不可用，触发熔断", e);
+                throw e;
             }
-            log.debug("查询到缓存 conversationId={} oldLastSeq={}",conversationId,oldLastSeq);
         }
 
         log.debug("toId={} -> sendId={} 获取到会话conversationId={}",toId,senderId,conversationId);
@@ -145,7 +153,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
 
         message = builderMessage(messageId,conversationId, seq, saveOutboxDTO, now);
         // 异步创建会话和outbox
-        insertMessageOutbox(message, conversationId, seq);
+        Long outboxId = insertMessageOutbox(message, conversationId, seq);
 //        if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
 //            sendAdvanceDeviceCursorEvent(senderId, saveMsgDTO.getDeviceId(), conversationId, seq);
 //        }
@@ -154,6 +162,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .messageId(message.getId())
                 .reuseMessage(false)
                 .seq(seq)
+                .outboxId(outboxId)
                 .conversationId(conversationId)
                 .timeAt(now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
                 .build();
@@ -178,7 +187,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .build();
         rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE, KEY_ADVANCE_DEVICE_CURSOR, event);
     }
-    private void insertMessageOutbox(Message message, Long conversationId, Long seq) {
+    private Long insertMessageOutbox(Message message, Long conversationId, Long seq) {
         MessagePayloadDTO payloadDTO = BeanUtil.copyProperties(message, MessagePayloadDTO.class);
         String jsonPayload = JSON.toJSONString(payloadDTO);
         MessageOutbox outbox = MessageOutbox.builder()
@@ -209,6 +218,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                         elapsedMs(saveStartedAt));
             }
         }
+        return outbox.getId();
     }
 
     private void sendConversationUpdateEvent(Long conversationId, Long oldLastSeq, Long seq, Message message, LocalDateTime now) {
@@ -305,6 +315,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+
         boolean inserted = false;
         try {
             inserted = messageMapper.insert(message) > 0;
@@ -328,6 +339,17 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
 
     private static double elapsedMs(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000.0;
+    }
+
+    private void updateStatusToRetry(String eventType, String eventKey,String reason){
+        messageOutboxServer.updateStatusToRetry(OutBoxUpdateStatusDTO.builder()
+                        .eventKey(eventKey)
+                        .eventType(eventType)
+                        .lastError(reason)
+                        .build());
+    }
+    private String getEventKey(Long sendId,String clientMessageId){
+        return MESSAGE_CREATE_EVENT_KEY.formatted(sendId,clientMessageId);
     }
 
 }

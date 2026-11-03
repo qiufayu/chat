@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SaveMsgVO {
     private Long messageId;
+    private Long outboxId;
     private Long seq;
     private Long conversationId;
     private Long timeAt;

@@ -1,8 +1,11 @@
 package com.fayu.connection.listener;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.fayu.api.client.MsgClient;
+import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
 import com.fayu.common.domain.po.EventEnvelope;
 import com.fayu.common.domain.po.MessageMetadata;
+import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
@@ -21,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.Collection;
 import java.util.Map;
 
+import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
 import static com.fayu.common.constant.RabbitmqConstant.KEY_SEND_MESSAGE;
 import static com.fayu.common.constant.RabbitmqConstant.KEY_SENDER_SELF_SYNC;
 import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
@@ -33,6 +37,7 @@ import static com.fayu.common.constant.RabbitmqConstant.SENDER_SELF_SYNC_QUEUE;
 public class MessageListener {
 
     private final MessageUtil messageUtil;
+    private final MsgClient msgClient;
 
     @RabbitListener(
             bindings = @QueueBinding(
@@ -62,6 +67,9 @@ public class MessageListener {
             return;
         }
 
+        String eventType = metadata.getEventType();
+        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(sendId, metadata.getClientMessageId());
+
         ChatResponseMessageVO<Object> messageVO = new ChatResponseMessageVO<>();
         BeanUtil.copyProperties(metadata, messageVO);
         messageVO.setConversationId(metadata.getConversationId());
@@ -84,10 +92,14 @@ public class MessageListener {
             }
             channel.writeAndFlush(new TextWebSocketFrame(json)).addListener(future -> {
                 if (!future.isSuccess()) {
-                    log.warn("在线消息写入通道失败，等待设备游标补拉 messageId={}",
-                            metadata.getMessageId(), future.cause());
+                    Throwable cause = future.cause();
+                    log.warn("在线消息写入通道失败，等待重试 messageId={}", metadata.getMessageId(), cause);
+                    // 关闭通道
+                    channel.close();
                 }
+
             });
+
         }
     }
 
@@ -151,5 +163,13 @@ public class MessageListener {
                 }
             });
         }
+    }
+
+    private void updateStatusToRetry(String eventType,String eventKey, String reason) {
+        msgClient.updateStatusToRetry(OutBoxUpdateStatusDTO.builder()
+                .eventType(eventType)
+                .eventKey(eventKey)
+                .lastError(reason)
+                .build());
     }
 }

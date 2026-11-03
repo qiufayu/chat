@@ -113,23 +113,31 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         if (request.getMessageType() == null) {
             throw new BaseException("messageType 不能为空", 400);
         }
-        MessageContentType messageType =
-                MessageContentType.of(request.getMessageType());
+        MessageContentType messageType = MessageContentType.of(request.getMessageType());
         EventEnvelope<?> eventEnvelope = saveMsgGetEventEnvelope(msg, messageType);
-
-        sendSavedAck(ctx, msg.getClientMessageId(), eventEnvelope.getMetadata());
-        if (eventEnvelope.getMetadata().isReuseMessage()) {
+        MessageMetadata metadata = eventEnvelope.getMetadata();
+        sendSavedAck(ctx, msg.getClientMessageId(), metadata);
+        if (metadata.isReuseMessage()) {
             return;
         }
         // 异步插入消息和更新会话
         outboxRetryExecutor.execute(()->{
             try {
-                insertMessageAndUpdateConversation(eventEnvelope);
-                // message 和会话事务提交后，才发布推送
-                publish(eventEnvelope);
-                publishSenderSelfSync(eventEnvelope);
+                String lockedBy = Thread.currentThread().getName();
+                if (!msgClient.getRetryLock(metadata.getOutboxId(), lockedBy)) {
+                    return;
+                }
+                try {
+                    insertMessageAndUpdateConversation(eventEnvelope);
+                    // 发布方法内部监听MQ确认，负责后续状态处理
+                    publish(eventEnvelope);
+                    // 发送者其他设备的自同步，当前保持独立处理
+                    publishSenderSelfSync(eventEnvelope);
+                } catch (Exception e) {
+                    log.error("消息后台处理失败，messageId={}", metadata.getMessageId(), e);
+                    finishOutboxAsync(metadata, false, e.getMessage());
+                }
             } catch (Exception e) {
-                MessageMetadata metadata = eventEnvelope.getMetadata();
                 log.error("消息后台处理失败，messageId={}", metadata.getMessageId(), e);
                 updateStatusToRetry(metadata, e.getMessage());
             }
@@ -204,22 +212,61 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         try {
             rabbitTemplate.convertAndSend(
                     MESSAGE_EXCHANGE, KEY_SEND_MESSAGE, eventEnvelope, correlationData);
-            correlationData.getFuture().whenComplete((confirm, throwable) -> {
-                if (throwable != null || confirm == null || !confirm.isAck()) {
-                    String reason = throwable == null
-                            ? (confirm == null ? "未收到发布确认" : confirm.getReason())
-                            : throwable.getMessage();
-                    log.warn("聊天消息发布失败 messageId={}, sendId={}, reason={}", metadata.getMessageId(), metadata.getSendId(), reason);
-                    chatBusinessExecutor.execute(() -> updateStatusToRetry(metadata, reason));
-                    return;
+            correlationData.getFuture().whenComplete((confirm, error) -> {
+                boolean success = error == null
+                        && confirm != null
+                        && confirm.isAck()
+                        && correlationData.getReturned() == null;
+
+                String reason = null;
+                if (!success) {
+                    reason = error != null ? error.getMessage()
+                            : correlationData.getReturned() != null
+                            ? "消息未路由到目标队列"
+                            : confirm == null
+                            ? "未收到发布确认"
+                            : confirm.getReason();
                 }
-                log.info("聊天消息发布成功 messageId={}, sendId={}", metadata.getMessageId(), metadata.getSendId());
-                chatBusinessExecutor.execute(() -> updateStatusToSent(metadata));
+
+                finishOutboxAsync(metadata, success, reason);
             });
         } catch (Exception e) {
             log.warn("聊天消息发布失败 messageId={}, sendId={}",
                     metadata.getMessageId(), metadata.getSendId(), e);
             updateStatusToRetry(metadata, e.getMessage());
+        }
+    }
+
+    private void finishOutboxAsync(MessageMetadata metadata, boolean success, String reason) {
+        try {
+            chatBusinessExecutor.execute(() -> {
+                try {
+                    OutBoxUpdateStatusDTO dto = OutBoxUpdateStatusDTO.builder()
+                            .eventType(metadata.getEventType())
+                            .eventKey(getEventKey(metadata.getSendId(), metadata.getClientMessageId()))
+                            .status(success ? OutboxStatusEnum.SENT.getCode() : null)
+                            .publishedAt(success ? LocalDateTime.now() : null)
+                            .lastError(reason)
+                            .build();
+                    // sql释放锁
+                    boolean updated = success
+                            ? msgClient.updateStatus(dto)
+                            : msgClient.updateStatusToRetry(dto);
+
+                    if (!updated) {
+                        log.warn("Outbox 状态未更新，保留锁等待恢复，outboxId={}",
+                                metadata.getOutboxId());
+                    }
+                } catch (Exception e) {
+                    // 状态更新失败时，不主动解锁。
+                    // 等待锁过期后，由扫描任务恢复。
+                    log.error("Outbox 状态更新异常，outboxId={}",
+                            metadata.getOutboxId(), e);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Outbox 状态处理任务提交失败，outboxId={}",
+                    metadata.getOutboxId(), e);
         }
     }
 
@@ -263,6 +310,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
             throw new BaseException("消息保存失败", 500);
         }
         MessageMetadata metadata = buildMetadata(msg, contentType, saveMsgVO);
+
         return EventEnvelope.builder()
                 .metadata(metadata)
                 .payload(msg.getPayload())
@@ -274,6 +322,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
                 .conversationId(saveMsgVO.getConversationId())
                 .sendId(msg.getSenderId())
                 .toId(msg.getTo())
+                .outboxId(saveMsgVO.getOutboxId())
                 .messageId(saveMsgVO.getMessageId())
                 .messageType(contentType.getValue())
                 .clientMessageId(msg.getClientMessageId())
@@ -312,7 +361,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private void updateStatusToRetry(MessageMetadata metadata, String reason) {
         OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
                 .eventType(metadata.getEventType())
-                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getSendId(), metadata.getClientMessageId()))
+                .eventKey(getEventKey(metadata.getSendId(),metadata.getClientMessageId()))
                 .lastError(reason)
                 .build();
         rabbitTemplate.convertAndSend(
@@ -345,5 +394,8 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
 
     private static double elapsedMs(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000.0;
+    }
+    private String getEventKey(Long sendId,String clientMessageId){
+        return MESSAGE_CREATE_EVENT_KEY.formatted(sendId,clientMessageId);
     }
 }

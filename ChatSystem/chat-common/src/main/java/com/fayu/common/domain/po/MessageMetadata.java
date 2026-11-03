@@ -15,6 +15,7 @@ public class MessageMetadata {
     private Long sendId;
     private Long toId;
     private String groupId;
+    private Long outboxId;
 
     private Long messageId;
     private Integer messageType;
