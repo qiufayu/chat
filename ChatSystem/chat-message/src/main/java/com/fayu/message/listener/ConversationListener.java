@@ -31,8 +31,9 @@ public class ConversationListener {
         try {
             conversationServer.updateConversation(dto);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("更新会话失败 dto={}",dto, e);
         }
+        log.info("【mq】 更新会话 dto={}",dto);
     }
 
 }

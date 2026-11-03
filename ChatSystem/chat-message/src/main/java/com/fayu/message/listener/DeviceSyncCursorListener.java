@@ -40,5 +40,7 @@ public class DeviceSyncCursorListener {
             log.error("设备游标推进失败 userId={}, deviceId={}, conversationId={}, seq={}",
                     event.getUserId(), event.getDeviceId(), event.getConversationId(), event.getSeq(), e);
         }
+        log.info("【mq】 推进设备游标 userId={}, deviceId={}, conversationId={}, seq={}",
+                event.getUserId(), event.getDeviceId(), event.getConversationId(), event.getSeq());
     }
 }

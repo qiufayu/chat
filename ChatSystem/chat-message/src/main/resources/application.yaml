@@ -39,6 +39,12 @@ spring:
         max-attempts: 3
     publisher-returns: true
     publisher-confirm-type: correlated
+    # 保留已有连接配置
+    listener:
+      simple:
+        concurrency: 5
+        max-concurrency: 10
+        prefetch: 20
 
 knife4j:
   enable: true
@@ -82,4 +88,4 @@ chat:
 
 logging:
   level:
-    com.fayu: debug
+    com.fayu: info

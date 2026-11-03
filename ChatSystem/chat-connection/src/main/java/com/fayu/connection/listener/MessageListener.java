@@ -42,6 +42,7 @@ public class MessageListener {
             )
     )
     public void sendMessageListener(EventEnvelope<?> eventEnvelope) {
+        log.info("收到消息事件: {}", eventEnvelope);
         if (eventEnvelope == null || eventEnvelope.getMetadata() == null) {
             log.warn("收到空消息事件，忽略处理");
             return;
@@ -98,6 +99,7 @@ public class MessageListener {
             )
     )
     public void senderSelfSyncListener(EventEnvelope<?> eventEnvelope) {
+        log.info("收到发送者自同步事件: {}", eventEnvelope);
         if (eventEnvelope == null || eventEnvelope.getMetadata() == null) {
             log.warn("收到发送者自同步空事件，忽略处理");
             return;

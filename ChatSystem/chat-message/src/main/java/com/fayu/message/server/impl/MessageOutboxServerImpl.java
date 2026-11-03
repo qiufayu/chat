@@ -11,6 +11,11 @@ import com.fayu.message.mapper.MessageOutboxMapper;
 import com.fayu.message.server.IMessageOutboxServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +34,14 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
 
     private final MessageRetryProperties messageRetryProperties;
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    // @Transactional(rollbackFor = Exception.class)
+    @Retryable(
+            retryFor = {
+                    RuntimeException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 30,maxDelay = 300,multiplier = 2)
+    )
     public boolean updateStatus(OutBoxUpdateStatusDTO statusDTO) {
 
         if ( verifyMust(statusDTO)){
@@ -43,8 +55,8 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
                 .eq(MessageOutbox::getEventType, eventType)
                 .one();
         if (outbox == null){
-            log.error("outbox 不存在 eventType={},eventKey={}",eventType,eventKey);
-            return false;
+            log.warn("outbox 不存在 eventType={},eventKey={}",eventType,eventKey);
+            throw new RuntimeException("outbox 不存在");
         }
         log.debug("outbox 状态修改成功 eventType={},eventKey={}",eventType,eventKey);
         LocalDateTime updateAt = LocalDateTime.now();
@@ -74,8 +86,8 @@ public class MessageOutboxServerImpl extends ServiceImpl<MessageOutboxMapper, Me
                 .eq(MessageOutbox::getEventType, eventType)
                 .one();
         if (outbox == null){
-            log.error("outbox 不存在 ,eventType={},eventKey={}",eventType,eventKey);
-            return false;
+            log.warn("outbox 不存在 ,eventType={},eventKey={}",eventType,eventKey);
+            throw new RuntimeException("outbox 不存在");
         }
         if (Objects.equals(outbox.getStatus(), OutboxStatusEnum.SENT.getCode())) {
             // 迟到的失败回调不能把已经确认成功的事件重新置为重试。

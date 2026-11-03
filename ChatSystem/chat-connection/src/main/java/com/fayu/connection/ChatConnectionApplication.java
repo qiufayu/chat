@@ -5,6 +5,7 @@ import com.fayu.api.client.UserClient;
 import com.fayu.api.config.DefaultFeignConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
@@ -17,6 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @RequiredArgsConstructor
+@EnableRabbit
 public class ChatConnectionApplication implements ApplicationRunner {
 
     private final MsgClient msgClient;

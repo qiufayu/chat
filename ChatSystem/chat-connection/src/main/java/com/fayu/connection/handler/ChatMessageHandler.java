@@ -1,11 +1,7 @@
 package com.fayu.connection.handler;
 
 import com.fayu.api.client.MsgClient;
-import com.fayu.common.domain.dto.ChatRequestMessageDTO;
-import com.fayu.common.domain.dto.DeliveryAckDTO;
-import com.fayu.common.domain.dto.ReadAckDTO;
-import com.fayu.common.domain.dto.SaveMsgDTO;
-import com.fayu.common.domain.dto.SyncRequestDTO;
+import com.fayu.common.domain.dto.*;
 import com.fayu.common.domain.po.EventEnvelope;
 import com.fayu.common.domain.po.MessageMetadata;
 import com.fayu.common.domain.vo.SaveMsgVO;
@@ -14,6 +10,7 @@ import com.fayu.common.exception.BaseException;
 import com.fayu.connection.domain.po.Message;
 import com.fayu.connection.enums.EventType;
 import com.fayu.connection.enums.MessageContentType;
+import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.executor.ChatBusinessExecutor;
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
@@ -29,13 +26,12 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
-import static com.fayu.common.constant.RabbitmqConstant.KEY_SEND_MESSAGE;
-import static com.fayu.common.constant.RabbitmqConstant.KEY_SENDER_SELF_SYNC;
-import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
+import static com.fayu.common.constant.RabbitmqConstant.*;
 
 @Slf4j
 @Component
@@ -145,6 +141,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     }
 
     private void publish(EventEnvelope<?> eventEnvelope) {
+        log.info("发布消息事件: {}", eventEnvelope);
         MessageMetadata metadata = eventEnvelope.getMetadata();
         String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId());
         CorrelationData correlationData = new CorrelationData(eventKey);
@@ -156,12 +153,16 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
                     String reason = throwable == null
                             ? (confirm == null ? "未收到发布确认" : confirm.getReason())
                             : throwable.getMessage();
-                    updateStatusToRetry(metadata, reason);
+                    log.warn("聊天消息发布失败 messageId={}, sendId={}, reason={}", metadata.getMessageId(), metadata.getSendId(), reason);
+                    chatBusinessExecutor.execute(() -> updateStatusToRetry(metadata, reason));
                     return;
                 }
-                updateStatusToSent(metadata);
+                log.info("聊天消息发布成功 messageId={}, sendId={}", metadata.getMessageId(), metadata.getSendId());
+                chatBusinessExecutor.execute(() -> updateStatusToSent(metadata));
             });
         } catch (Exception e) {
+            log.warn("聊天消息发布失败 messageId={}, sendId={}",
+                    metadata.getMessageId(), metadata.getSendId(), e);
             updateStatusToRetry(metadata, e.getMessage());
         }
     }
@@ -226,20 +227,24 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     }
 
     private void updateStatusToSent(MessageMetadata metadata) {
-        msgClient.updateStatus(com.fayu.common.domain.dto.OutBoxUpdateStatusDTO.builder()
+        OutBoxUpdateStatusDTO build = OutBoxUpdateStatusDTO.builder()
                 .eventType(metadata.getEventType())
                 .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId()))
-                .status(com.fayu.connection.enums.OutboxStatusEnum.SENT.getCode())
-                .publishedAt(java.time.LocalDateTime.now())
-                .build());
+                .status(OutboxStatusEnum.SENT.getCode())
+                .publishedAt(LocalDateTime.now())
+                .build();
+        rabbitTemplate.convertAndSend(
+                MESSAGE_EXCHANGE, KEY_UPDATE_STATUS, build);
     }
 
     private void updateStatusToRetry(MessageMetadata metadata, String reason) {
-        msgClient.updateStatusToRetry(com.fayu.common.domain.dto.OutBoxUpdateStatusDTO.builder()
+        OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
                 .eventType(metadata.getEventType())
                 .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId()))
                 .lastError(reason)
-                .build());
+                .build();
+        rabbitTemplate.convertAndSend(
+                MESSAGE_EXCHANGE, KEY_UPDATE_STATUS_TO_RETRY, statusDTO);
     }
 
     private void sendError(ChannelHandlerContext ctx, String clientMessageId, String message) {

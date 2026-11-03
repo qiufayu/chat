@@ -28,4 +28,8 @@ public class RedisIdWorker {
         redisTemplate.opsForValue().setIfAbsent(keyPrefix,String.valueOf(0));
         return redisTemplate.opsForValue().increment(keyPrefix);
     }
+    public Long getId(String keyPrefix){
+        redisTemplate.opsForValue().setIfAbsent(keyPrefix,String.valueOf(0));
+        return redisTemplate.opsForValue().increment(keyPrefix);
+    }
 }

@@ -20,8 +20,11 @@ import com.fayu.message.server.IUserConversationServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,8 +33,7 @@ import java.util.ArrayList;
 
 import static com.fayu.common.constant.RabbitmqConstant.KEY_CREATE_USER_CONVERSATION;
 import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
-import static com.fayu.common.constant.RedisConstant.GROUP_CONVERSATION_ID;
-import static com.fayu.common.constant.RedisConstant.SINGLE_CONVERSATION_ID;
+import static com.fayu.common.constant.RedisConstant.*;
 
 @Slf4j
 @Service
@@ -44,6 +46,14 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
     private final RabbitTemplate rabbitTemplate;
 
     @Override
+    @Retryable(
+            retryFor = {
+                    DeadlockLoserDataAccessException.class,
+                    DuplicateKeyException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 30,maxDelay = 300,multiplier = 2)
+    )
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO getConversation(Long sendId, Long toId , Long groupId) {
         log.debug("查询数据库获取会话信息 sendId={} toId={} groupId={}",sendId,toId,groupId);
@@ -66,7 +76,8 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
         int conversationType = groupId != null ? ConversationType.GROUP.getValue() : ConversationType.SINGLE.getValue();
         if (conversation == null){
             conversation = new Conversation();
-            conversation.setConversationType(conversationType)
+            conversation
+                    .setConversationType(conversationType)
                     .setStatus(ConversationStatus.NORMAL.getValue())
                     .setLastSeq(0L)
                     .setCreatedAt(LocalDateTime.now())
@@ -100,7 +111,7 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
         }else{
             saveConversationCache(conversation.getId(),groupId);
         }
-        log.debug("添加缓存成功 conversationId={}",conversation.getId());
+        log.debug("添加缓存成功 lowId={}, highId={} conversationId={}", lowId, highId,conversation.getId());
 
         ConversationVO conversationVO = BeanUtil.copyProperties(conversation, ConversationVO.class);
         conversationVO.setConversationId(conversation.getId());
@@ -135,7 +146,7 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
         }
         if (dto.getOldLastSeq() != null && dto.getNewLastSeq() != null){
             wrapper.set(Conversation::getLastSeq,dto.getNewLastSeq())
-                    .apply("last_seq = {0}",dto.getOldLastSeq());
+                    .lt(Conversation::getLastSeq, dto.getNewLastSeq());
             needUpdate = true;
         }
         if (dto.getLastMessageAt() != null && dto.getLastMessageId() != null){

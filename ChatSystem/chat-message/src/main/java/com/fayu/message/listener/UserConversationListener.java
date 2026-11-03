@@ -32,5 +32,6 @@ public class UserConversationListener {
         if (!pass){
             log.error("批量插入用户会话失败，userConversations={}",userConversations);
         }
+        log.info("【mq】 创建用户会话 userConversations={}",userConversations);
     }
 }
