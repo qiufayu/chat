@@ -1,22 +1,14 @@
 package com.fayu.api.client;
 
-import com.fayu.common.domain.dto.ChatRequestMessageDTO;
-import com.fayu.common.domain.dto.DeliveryAckDTO;
-import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
-import com.fayu.common.domain.dto.ReadAckDTO;
-import com.fayu.common.domain.dto.SaveMsgDTO;
-import com.fayu.api.domain.dto.VerifyMsgDTO;
-import com.fayu.common.domain.po.EventEnvelope;
+import com.fayu.common.domain.dto.*;
 import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
-import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.common.domain.vo.SyncBatchVO;
 import com.fayu.common.domain.vo.SyncSummaryVO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @FeignClient(value = "chat-message")
@@ -26,7 +18,7 @@ public interface MsgClient {
     void start();
 
     @PostMapping("/msg/save")
-    SaveMsgVO saveMsg(@RequestBody SaveMsgDTO saveMsgDTO);
+    SaveMsgVO saveMsg(@RequestBody SaveOutboxDTO saveOutboxDTO);
 
     @GetMapping("/msg/info")
     ChatResponseMessageVO<ChatRequestMessageDTO> getMessageInfo(
@@ -65,5 +57,8 @@ public interface MsgClient {
     @PostMapping("/sync/read/ack")
     boolean ackRead(@RequestParam("userId") Long userId,
                     @RequestBody ReadAckDTO ack);
+
+    @PostMapping("/msg/insert")
+    void saveMsgAndUpdateConversation(@RequestBody SaveMsgAndUpdateConversationDTO dto);
 
 }

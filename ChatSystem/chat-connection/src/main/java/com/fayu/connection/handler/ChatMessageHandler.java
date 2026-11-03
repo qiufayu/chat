@@ -1,5 +1,6 @@
 package com.fayu.connection.handler;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fayu.api.client.MsgClient;
 import com.fayu.common.domain.dto.*;
 import com.fayu.common.domain.po.EventEnvelope;
@@ -12,6 +13,7 @@ import com.fayu.connection.enums.EventType;
 import com.fayu.connection.enums.MessageContentType;
 import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.executor.ChatBusinessExecutor;
+import com.fayu.connection.executor.OutboxRetryExecutor;
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
 import com.fayu.connection.utils.MessageUtil;
@@ -46,7 +48,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private final MessageUtil messageUtil;
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate stringRedisTemplate;
-
+    private final OutboxRetryExecutor outboxRetryExecutor;
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message<?> msg) {
         SingleSession session = SingleSessionFactory.getSession();
@@ -64,7 +66,12 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         msg.setSenderId(userId);
         msg.setDeviceId(deviceId);
         String type = msg.getType().toUpperCase();
+
+        boolean timing = sampleTiming(msg.getClientMessageId());
+        long submittedAt = System.nanoTime();
         chatBusinessExecutor.execute(() -> {
+            long startedAt = System.nanoTime();
+            double queueMs = (startedAt - submittedAt) / 1_000_000.0;
             try {
                 switch (type) {
                     case "SYNC_REQUEST" -> handleSyncRequest(ctx, userId, deviceId, msg);
@@ -75,6 +82,19 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
             } catch (Exception e) {
                 log.error("消息处理失败 userId={}, deviceId={}, type={}", userId, deviceId, type, e);
                 sendError(ctx, msg.getClientMessageId(), e.getMessage());
+            }finally {
+                if (timing) {
+                    log.info(
+                            "[PERF_QUEUE] clientMessageId={} queueMs={} taskMs={} active={} poolSize={} queueSize={}",
+                            msg.getClientMessageId(),
+                            queueMs,
+                            elapsedMs(startedAt),
+                            chatBusinessExecutor.getActiveCount(),
+                            chatBusinessExecutor.getPoolSize(),
+                            chatBusinessExecutor.getThreadPoolExecutor()
+                                    .getQueue().size()
+                    );
+                }
             }
         });
     }
@@ -89,16 +109,52 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         if (!Boolean.TRUE.equals(friend)) {
             throw new BaseException("对方不是好友或已被拉黑", 403);
         }
+        ChatRequestMessageDTO request = castPayload(msg.getPayload(), ChatRequestMessageDTO.class);
+        if (request.getMessageType() == null) {
+            throw new BaseException("messageType 不能为空", 400);
+        }
+        MessageContentType messageType =
+                MessageContentType.of(request.getMessageType());
+        EventEnvelope<?> eventEnvelope = saveMsgGetEventEnvelope(msg, messageType);
 
-        EventEnvelope<?> eventEnvelope = saveMsgGetEventEnvelope(msg, MessageContentType.TEXT);
         sendSavedAck(ctx, msg.getClientMessageId(), eventEnvelope.getMetadata());
         if (eventEnvelope.getMetadata().isReuseMessage()) {
             return;
         }
-        publish(eventEnvelope);
-        publishSenderSelfSync(eventEnvelope);
+        // 异步插入消息和更新会话
+        outboxRetryExecutor.execute(()->{
+            try {
+                insertMessageAndUpdateConversation(eventEnvelope);
+                // message 和会话事务提交后，才发布推送
+                publish(eventEnvelope);
+                publishSenderSelfSync(eventEnvelope);
+            } catch (Exception e) {
+                MessageMetadata metadata = eventEnvelope.getMetadata();
+                log.error("消息后台处理失败，messageId={}", metadata.getMessageId(), e);
+                updateStatusToRetry(metadata, e.getMessage());
+            }
+        });
     }
 
+    private void insertMessageAndUpdateConversation(EventEnvelope<?> eventEnvelope){
+        MessageMetadata metadata = eventEnvelope.getMetadata();
+        if (metadata == null) {
+            return;
+        }
+        JsonNode payload = MAPPER.valueToTree(eventEnvelope.getPayload());
+        SaveMsgAndUpdateConversationDTO dto = SaveMsgAndUpdateConversationDTO.builder()
+                .conversationId(metadata.getConversationId())
+                .messageId(metadata.getMessageId())
+                .clientMessageId(metadata.getClientMessageId())
+                .seq(metadata.getSeq())
+                .messageType(metadata.getMessageType())
+                .eventType(metadata.getEventType())
+                .sendId(metadata.getSendId())
+                .payload(payload)
+                .build();
+        msgClient.saveMsgAndUpdateConversation(dto);
+
+    }
     private void handleSyncRequest(ChannelHandlerContext ctx, Long userId, String deviceId, Message<?> msg) {
         SyncRequestDTO request = castPayload(msg.getPayload(), SyncRequestDTO.class);
         request.setDeviceId(deviceId);
@@ -143,7 +199,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private void publish(EventEnvelope<?> eventEnvelope) {
         log.info("发布消息事件: {}", eventEnvelope);
         MessageMetadata metadata = eventEnvelope.getMetadata();
-        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId());
+        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getSendId(), metadata.getClientMessageId());
         CorrelationData correlationData = new CorrelationData(eventKey);
         try {
             rabbitTemplate.convertAndSend(
@@ -183,7 +239,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
             throw new BaseException("消息为空", 400);
         }
         String content = getContentByType(msg.getPayload(), contentType);
-        SaveMsgDTO saveMsgDTO = SaveMsgDTO.builder()
+        SaveOutboxDTO saveOutboxDTO = SaveOutboxDTO.builder()
                 .senderId(msg.getSenderId())
                 .deviceId(msg.getDeviceId())
                 .toId(msg.getTo())
@@ -191,11 +247,30 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
                 .messageType(contentType.getValue())
                 .textContent(content)
                 .build();
-        SaveMsgVO saveMsgVO = msgClient.saveMsg(saveMsgDTO);
+        SaveMsgVO saveMsgVO;
+        long feignStartedAt = System.nanoTime();
+
+        try {
+            saveMsgVO = msgClient.saveMsg(saveOutboxDTO);
+        } finally {
+            if (sampleTiming(saveOutboxDTO.getClientMessageId())) {
+                log.info("[PERF_FEIGN] clientMessageId={} totalMs={}",
+                        saveOutboxDTO.getClientMessageId(),
+                        elapsedMs(feignStartedAt));
+            }
+        }
         if (saveMsgVO == null) {
             throw new BaseException("消息保存失败", 500);
         }
-        MessageMetadata metadata = MessageMetadata.builder()
+        MessageMetadata metadata = buildMetadata(msg, contentType, saveMsgVO);
+        return EventEnvelope.builder()
+                .metadata(metadata)
+                .payload(msg.getPayload())
+                .build();
+    }
+
+    private static MessageMetadata buildMetadata(Message<?> msg, MessageContentType contentType, SaveMsgVO saveMsgVO) {
+        return MessageMetadata.builder()
                 .conversationId(saveMsgVO.getConversationId())
                 .sendId(msg.getSenderId())
                 .toId(msg.getTo())
@@ -207,10 +282,6 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
                 .timestamp(saveMsgVO.getTimeAt())
                 .deviceId(msg.getDeviceId())
                 .isReuseMessage(Boolean.TRUE.equals(saveMsgVO.getReuseMessage()))
-                .build();
-        return EventEnvelope.builder()
-                .metadata(metadata)
-                .payload(msg.getPayload())
                 .build();
     }
 
@@ -224,12 +295,13 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         response.put("seq", metadata.getSeq());
         response.put("serverTime", System.currentTimeMillis());
         ctx.channel().writeAndFlush(new TextWebSocketFrame(messageUtil.toJson(response)));
+
     }
 
     private void updateStatusToSent(MessageMetadata metadata) {
         OutBoxUpdateStatusDTO build = OutBoxUpdateStatusDTO.builder()
                 .eventType(metadata.getEventType())
-                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId()))
+                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getSendId(), metadata.getClientMessageId()))
                 .status(OutboxStatusEnum.SENT.getCode())
                 .publishedAt(LocalDateTime.now())
                 .build();
@@ -240,7 +312,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private void updateStatusToRetry(MessageMetadata metadata, String reason) {
         OutBoxUpdateStatusDTO statusDTO = OutBoxUpdateStatusDTO.builder()
                 .eventType(metadata.getEventType())
-                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getMessageId()))
+                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getSendId(), metadata.getClientMessageId()))
                 .lastError(reason)
                 .build();
         rabbitTemplate.convertAndSend(
@@ -264,5 +336,14 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
 
     private <T> T castPayload(Object payload, Class<T> type) {
         return MAPPER.convertValue(payload, type);
+    }
+
+    private static boolean sampleTiming(String clientMessageId) {
+        return clientMessageId != null
+                && Math.floorMod(clientMessageId.hashCode(), 100) == 0;
+    }
+
+    private static double elapsedMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000.0;
     }
 }

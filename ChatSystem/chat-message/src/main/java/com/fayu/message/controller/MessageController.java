@@ -1,11 +1,10 @@
 package com.fayu.message.controller;
 
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
-import com.fayu.common.domain.dto.SaveMsgDTO;
+import com.fayu.common.domain.dto.SaveMsgAndUpdateConversationDTO;
+import com.fayu.common.domain.dto.SaveOutboxDTO;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
-import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.common.domain.vo.SaveMsgVO;
-import com.fayu.message.server.IConversationServer;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +24,8 @@ public class MessageController {
     }
 
     @PostMapping("/save")
-    public SaveMsgVO saveMsg(@RequestBody SaveMsgDTO saveMsgDTO){
-        return messageServer.saveMsg(saveMsgDTO);
+    public SaveMsgVO saveMsg(@RequestBody SaveOutboxDTO saveOutboxDTO){
+        return messageServer.saveOutbox(saveOutboxDTO);
     }
 
     @GetMapping("/info")
@@ -35,5 +34,10 @@ public class MessageController {
             @RequestParam("seq") Long seq)
     {
         return messageServer.getMessageInfo(conversationId,seq);
+    }
+
+    @PostMapping("/insert")
+    public void saveMsgAndUpdateConversation(@RequestBody SaveMsgAndUpdateConversationDTO dto){
+        messageServer.saveMsgAndUpdateConversation(dto);
     }
 }

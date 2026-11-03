@@ -6,5 +6,6 @@ import lombok.Data;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ChatRequestMessageDTO {
+    private Integer messageType;
     private String content;
 }

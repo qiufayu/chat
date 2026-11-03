@@ -144,7 +144,7 @@ public class ConversationServerImpl extends ServiceImpl<ConversationMapper, Conv
             wrapper.set(Conversation::getStatus,dto.getStatus());
             needUpdate = true;
         }
-        if (dto.getOldLastSeq() != null && dto.getNewLastSeq() != null){
+        if (dto.getNewLastSeq() != null){
             wrapper.set(Conversation::getLastSeq,dto.getNewLastSeq())
                     .lt(Conversation::getLastSeq, dto.getNewLastSeq());
             needUpdate = true;

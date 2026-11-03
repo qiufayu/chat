@@ -1,15 +1,19 @@
 package com.fayu.connection.task;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fayu.api.client.MsgClient;
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
 import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.dto.SaveMsgAndUpdateConversationDTO;
 import com.fayu.common.domain.po.EventEnvelope;
 import com.fayu.common.domain.po.MessageMetadata;
 import com.fayu.common.domain.po.MessageOutbox;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.connection.enums.EventType;
+import com.fayu.connection.enums.MessageContentType;
 import com.fayu.connection.enums.OutboxStatusEnum;
 import com.fayu.connection.executor.OutboxRetryExecutor;
+import com.fayu.connection.utils.MessageUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
@@ -20,7 +24,6 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static com.fayu.common.constant.MessageEventKey.MESSAGE_CREATE_EVENT_KEY;
 import static com.fayu.common.constant.RabbitmqConstant.KEY_SEND_MESSAGE;
 import static com.fayu.common.constant.RabbitmqConstant.MESSAGE_EXCHANGE;
 
@@ -32,6 +35,7 @@ public class RetryScheduleTask {
     private final OutboxRetryExecutor outboxRetryExecutor;
     private final MsgClient msgClient;
     private final RabbitTemplate rabbitTemplate;
+    private final MessageUtil messageUtil;
 
     // @Scheduled(fixedDelayString = "${chat.msg.retry.scan-interval:5000}")
     public void retryScheduleTask() {
@@ -58,6 +62,9 @@ public class RetryScheduleTask {
             ChatResponseMessageVO<ChatRequestMessageDTO> messageInfo =
                     msgClient.getMessageInfo(outbox.getConversationId(), outbox.getSeq());
             if (messageInfo == null) {
+                log.warn("消息不存在，重新插入消息，OutboxId: {}", outbox.getId());
+                // 重新插入消息
+                retryInsertMessageAndUpdateConversation(outbox);
                 updateStatusToRetry(outbox, "消息不存在");
                 return;
             }
@@ -104,6 +111,33 @@ public class RetryScheduleTask {
             updateStatusToRetry(outbox, e.getMessage());
             msgClient.unlockRetry(outbox.getId(), lockedBy);
         }
+    }
+    private void retryInsertMessageAndUpdateConversation(MessageOutbox outbox) {
+        String eventKey = outbox.getEventKey();
+        String[] strings = eventKey.split(":");
+
+        if (strings.length != 4) {
+            return;
+        }
+
+        Long sendId = Long.parseLong(strings[1]);
+        String clientMessageId = strings[2];
+        JsonNode payload = messageUtil.toJsonNode(outbox.getPayload());
+
+        Integer messageType = payload.get("messageType").intValue();
+
+
+        SaveMsgAndUpdateConversationDTO dto = SaveMsgAndUpdateConversationDTO.builder()
+                .clientMessageId(clientMessageId)
+                .sendId(sendId)
+                .seq(outbox.getSeq())
+                .conversationId(outbox.getConversationId())
+                .messageId(outbox.getMessageId())
+                .payload(payload)
+                .messageType(messageType)
+                .eventType(outbox.getEventType())
+                .build();
+        msgClient.saveMsgAndUpdateConversation(dto);
     }
 
     private void updateStatusToRetry(MessageOutbox outbox, String reason) {

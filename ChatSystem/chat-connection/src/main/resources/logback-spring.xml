@@ -26,6 +26,7 @@
         </filter>
     </appender>
 
+    <!-- 原来的同步文件 appender 保持不变，改个名或保留都行 -->
     <appender name="DAILY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_HOME}/${APP_NAME}/daily/daily.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -39,12 +40,22 @@
         </encoder>
     </appender>
 
+    <!-- 新增：异步包装器 -->
+    <appender name="ASYNC_DAILY_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- 关键参数 -->
+        <queueSize>1024</queueSize>          <!-- 队列容量，默认 256 -->
+        <discardingThreshold>0</discardingThreshold>  <!-- 0 = 不丢弃，见下方说明 -->
+        <neverBlock>false</neverBlock>        <!-- true = 队列满时丢弃而非阻塞，见下方说明 -->
+        <includeCallerData>false</includeCallerData>  <!-- 默认 false，开 true 会影响性能 -->
+        <appender-ref ref="DAILY_FILE"/>      <!-- 引用真正的文件 appender -->
+    </appender>
+
     <logger name="com.fayu.connection" level="INFO"/>
 
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
+<!--        <appender-ref ref="CONSOLE"/>-->
 <!--        <appender-ref ref="ERROR_FILE"/>-->
-<!--        <appender-ref ref="DAILY_FILE"/>-->
+        <appender-ref ref="ASYNC_DAILY_FILE"/>
     </root>
 
 </configuration>

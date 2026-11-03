@@ -48,7 +48,7 @@
           <stringProp name="LoopController.loops">100</stringProp>
         </LoopController>
         <hashTree>
-          <eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler" testname="WebSocket Single Read Sampler">
+          <eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler" testname="WebSocket Single Read Sampler" enabled="true">
             <boolProp name="TLS">false</boolProp>
             <stringProp name="server"></stringProp>
             <stringProp name="port">80</stringProp>
@@ -60,7 +60,7 @@
             <boolProp name="optional">false</boolProp>
           </eu.luminis.jmeter.wssampler.SingleReadWebSocketSampler>
           <hashTree>
-            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON提取器">
+            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON提取器" enabled="true">
               <stringProp name="JSONPostProcessor.referenceNames">convId;msgSeq</stringProp>
               <stringProp name="JSONPostProcessor.jsonPathExprs">$.conversationId;$.seq</stringProp>
               <stringProp name="JSONPostProcessor.match_numbers">1;1</stringProp>
@@ -68,25 +68,6 @@
             </JSONPostProcessor>
             <hashTree/>
           </hashTree>
-          <eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler" testname="WebSocket Single Write Sampler">
-            <boolProp name="TLS">false</boolProp>
-            <stringProp name="server"></stringProp>
-            <stringProp name="port">80</stringProp>
-            <stringProp name="path"></stringProp>
-            <stringProp name="connectTimeout">20000</stringProp>
-            <stringProp name="payloadType">Text</stringProp>
-            <stringProp name="requestData">{
-  &quot;type&quot;: &quot;DELIVERY_ACK&quot;,
-  &quot;payload&quot;: {
-    &quot;conversationId&quot;: ${convId},
-    &quot;ackSeq&quot;: ${msgSeq}
-  }
-}</stringProp>
-            <boolProp name="createNewConnection">false</boolProp>
-            <boolProp name="loadDataFromFile">false</boolProp>
-            <stringProp name="dataFile"></stringProp>
-          </eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler>
-          <hashTree/>
         </hashTree>
         <ResultCollector guiclass="StatVisualizer" testclass="ResultCollector" testname="聚合报告">
           <boolProp name="ResultCollector.error_logging">false</boolProp>
@@ -126,7 +107,7 @@
         </ResultCollector>
         <hashTree/>
       </hashTree>
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="发送者100个人发送给100个不同的人" enabled="true">
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="发送者100个人发送给100个不同的人">
         <intProp name="ThreadGroup.num_threads">100</intProp>
         <intProp name="ThreadGroup.ramp_time">1</intProp>
         <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
@@ -161,7 +142,7 @@
           </eu.luminis.jmeter.wssampler.OpenWebSocketSampler>
           <hashTree/>
         </hashTree>
-        <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器" enabled="true">
+        <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器">
           <stringProp name="LoopController.loops">100</stringProp>
         </LoopController>
         <hashTree>
@@ -170,12 +151,12 @@
             <stringProp name="matchValue">CONNECTION_READY</stringProp>
           </eu.luminis.jmeter.wssampler.TextFrameFilter>
           <hashTree/>
-          <eu.luminis.jmeter.wssampler.TextFrameFilter guiclass="eu.luminis.jmeter.wssampler.TextFrameFilterGui" testclass="eu.luminis.jmeter.wssampler.TextFrameFilter" testname="WebSocket Text Frame Filter" enabled="true">
+          <eu.luminis.jmeter.wssampler.TextFrameFilter guiclass="eu.luminis.jmeter.wssampler.TextFrameFilterGui" testclass="eu.luminis.jmeter.wssampler.TextFrameFilter" testname="WebSocket Text Frame Filter">
             <stringProp name="comparisonType">Contains</stringProp>
             <stringProp name="matchValue">SYNC_SUMMARY</stringProp>
           </eu.luminis.jmeter.wssampler.TextFrameFilter>
           <hashTree/>
-          <eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler" testname="WebSocket request-response Sampler" enabled="true">
+          <eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler" testname="WebSocket request-response Sampler">
             <boolProp name="createNewConnection">false</boolProp>
             <boolProp name="TLS">false</boolProp>
             <stringProp name="server"></stringProp>
@@ -188,7 +169,7 @@
    &quot;to&quot;: ${toId},
   &quot;clientMessageId&quot;: &quot;msg-${userId}-${__UUID()}&quot;,
   &quot;payload&quot;: {
-    &quot;contentType&quot;: &quot;TEXT&quot;,
+    &quot;messageType&quot;: &quot;1&quot;,
     &quot;content&quot;: &quot;jmeter-${__UUID()}&quot;
   }
 }</stringProp>
@@ -197,7 +178,7 @@
             <stringProp name="dataFile"></stringProp>
           </eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler>
           <hashTree/>
-          <JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="JSON断言" enabled="true">
+          <JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="JSON断言">
             <stringProp name="JSON_PATH">$.type</stringProp>
             <stringProp name="EXPECTED_VALUE">SAVED_ACK</stringProp>
             <boolProp name="JSONVALIDATION">true</boolProp>

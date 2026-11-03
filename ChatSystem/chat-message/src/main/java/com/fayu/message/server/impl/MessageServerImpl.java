@@ -1,16 +1,20 @@
 package com.fayu.message.server.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjUtil;
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fayu.common.domain.dto.SaveMsgAndUpdateConversationDTO;
 import com.fayu.common.exception.BaseException;
 import com.fayu.common.utils.RedisIdWorker;
 import com.fayu.message.config.MessageRetryProperties;
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
 import com.fayu.message.domain.dto.AdvanceDeviceCursorDTO;
 import com.fayu.message.domain.dto.MessagePayloadDTO;
-import com.fayu.common.domain.dto.SaveMsgDTO;
+import com.fayu.common.domain.dto.SaveOutboxDTO;
 import com.fayu.message.domain.dto.UpdateConversationDTO;
+import com.fayu.message.domain.po.Conversation;
 import com.fayu.message.domain.po.Message;
 import com.fayu.message.domain.po.MessageInfoRow;
 import com.fayu.common.domain.po.MessageOutbox;
@@ -18,6 +22,7 @@ import com.fayu.common.domain.vo.ChatResponseMessageVO;
 import com.fayu.common.domain.vo.ConversationVO;
 import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.message.enums.EventType;
+import com.fayu.message.enums.MessageContentType;
 import com.fayu.message.enums.OutboxStatusEnum;
 import com.fayu.message.enums.YesNoStatus;
 import com.fayu.message.mapper.MessageMapper;
@@ -28,11 +33,8 @@ import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,19 +60,29 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
     private final RabbitTemplate rabbitTemplate;
 
     @Override
-    public SaveMsgVO saveMsg(SaveMsgDTO saveMsgDTO) {
+    public SaveMsgVO saveOutbox(SaveOutboxDTO saveOutboxDTO) {
 //        Long userId = UserContext.getUser();
 //        if (userId == null || userId.equals(saveMsgDTO.getSenderId())){
 //            throw new BaseException("业务错误",500);
 //        }
 
-        Long toId = saveMsgDTO.getToId();
-        Long senderId = saveMsgDTO.getSenderId();
-        String clientMessageId = saveMsgDTO.getClientMessageId();
+        Long toId = saveOutboxDTO.getToId();
+        Long senderId = saveOutboxDTO.getSenderId();
+        String clientMessageId = saveOutboxDTO.getClientMessageId();
+        boolean timing = sampleTiming(clientMessageId);
+
         // 查询消息是否存在
-        Message message = lambdaQuery().eq(Message::getSenderId, senderId)
+        long queryStartedAt = System.nanoTime();
+        Message message = lambdaQuery()
+                .eq(Message::getSenderId, senderId)
                 .eq(Message::getClientMessageId, clientMessageId)
                 .one();
+
+        if (timing) {
+            log.info("[PERF_QUERY] clientMessageId={} totalMs={}",
+                    clientMessageId, elapsedMs(queryStartedAt));
+        }
+
         long timeAt;
         if (message != null){
             timeAt = message.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -86,10 +98,12 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                     .messageId(message.getId())
                     .seq(message.getSeq())
                     .conversationId(message.getConversationId())
+                    .reuseMessage(true)
                     .timeAt(timeAt)
                     .build();
         }
 
+        long routeStartedAt = System.nanoTime();
 
         ConversationVO conversation;
         Long conversationId;
@@ -124,13 +138,14 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         Long seq = redisIdWorker.msgSeqIncrease(SEQ_INC.formatted(conversationId));
         LocalDateTime now = LocalDateTime.now();
         Long messageId = redisIdWorker.getId(MESSAGE_ID);
-        message = builderMessage(messageId,conversationId, seq, saveMsgDTO, now);
-        sendMessageCreateEvent(message, senderId, clientMessageId);
+        if (timing) {
+            log.info("[PERF_ROUTE] clientMessageId={} totalMs={}",
+                    clientMessageId, elapsedMs(routeStartedAt));
+        }
 
+        message = builderMessage(messageId,conversationId, seq, saveOutboxDTO, now);
         // 异步创建会话和outbox
-        sendMessageOutboxCreateEvent(message, conversationId, seq);
-        sendConversationUpdateEvent(conversationId, oldLastSeq, seq, message, now);
-
+        insertMessageOutbox(message, conversationId, seq);
 //        if (saveMsgDTO.getDeviceId() != null && !saveMsgDTO.getDeviceId().isBlank()) {
 //            sendAdvanceDeviceCursorEvent(senderId, saveMsgDTO.getDeviceId(), conversationId, seq);
 //        }
@@ -146,7 +161,8 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
 
     private void sendMessageCreateEvent(Message message, Long senderId, String clientMessageId) {
         try {
-            rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_CREATE_MESSAGE,message);
+//            rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_CREATE_MESSAGE,message);
+            boolean save = save(message);
         } catch (DuplicateKeyException e) {
             log.warn("消息已存在 sendId={},client_message_id={}", senderId, clientMessageId);
             throw e;
@@ -162,7 +178,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .build();
         rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE, KEY_ADVANCE_DEVICE_CURSOR, event);
     }
-    private void sendMessageOutboxCreateEvent(Message message, Long conversationId, Long seq) {
+    private void insertMessageOutbox(Message message, Long conversationId, Long seq) {
         MessagePayloadDTO payloadDTO = BeanUtil.copyProperties(message, MessagePayloadDTO.class);
         String jsonPayload = JSON.toJSONString(payloadDTO);
         MessageOutbox outbox = MessageOutbox.builder()
@@ -170,14 +186,29 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
                 .conversationId(conversationId)
                 .seq(seq)
                 .eventType(EventType.MESSAGE_CREATE.toString())
-                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(message.getId()))
+                .eventKey(MESSAGE_CREATE_EVENT_KEY.formatted(message.getSenderId(),
+                        message.getClientMessageId())
+                )
                 .status(OutboxStatusEnum.PENDING.getCode())
                 .retryCount(0)
                 .payload(jsonPayload)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_CREATE_OUTBOX,outbox);
+//        rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_CREATE_OUTBOX,outbox);
+
+        long saveStartedAt = System.nanoTime();
+        try {
+            messageOutboxServer.save(outbox);
+        } catch (DuplicateKeyException e) {
+            log.warn("消息合子已存在消息 messageId={}", outbox.getMessageId());
+        }finally {
+            if (sampleTiming(message.getClientMessageId())) {
+                log.info("[PERF_OUTBOX_SAVE] clientMessageId={} totalMs={}",
+                        message.getClientMessageId(),
+                        elapsedMs(saveStartedAt));
+            }
+        }
     }
 
     private void sendConversationUpdateEvent(Long conversationId, Long oldLastSeq, Long seq, Message message, LocalDateTime now) {
@@ -191,17 +222,17 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
         rabbitTemplate.convertAndSend(MESSAGE_EXCHANGE,KEY_UPDATE_CONVERSATION,conversationDTO);
     }
 
-    private Message builderMessage(Long messageId, Long conversationId, Long seq, SaveMsgDTO saveMsgDTO, LocalDateTime now) {
+    private Message builderMessage(Long messageId, Long conversationId, Long seq, SaveOutboxDTO saveOutboxDTO, LocalDateTime now) {
         now = LocalDateTime.now();
         return  Message.builder()
                 .id(messageId)
-                .clientMessageId(saveMsgDTO.getClientMessageId())
+                .clientMessageId(saveOutboxDTO.getClientMessageId())
                 .conversationId(conversationId)
                 .seq(seq)
-                .senderId(saveMsgDTO.getSenderId())
-                .messageType(saveMsgDTO.getMessageType())
-                .textContent(saveMsgDTO.getTextContent())
-                .attachmentId(saveMsgDTO.getAttachmentId())
+                .senderId(saveOutboxDTO.getSenderId())
+                .messageType(saveOutboxDTO.getMessageType())
+                .textContent(saveOutboxDTO.getTextContent())
+                .attachmentId(saveOutboxDTO.getAttachmentId())
                 .isBlocked(YesNoStatus.NO.getValue())
                 .recalledAt(null)
                 .isRecalled(YesNoStatus.NO.getValue())
@@ -238,6 +269,65 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
             vo.setErrorContent("消息含违规内容");
         }
         return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveMsgAndUpdateConversation(SaveMsgAndUpdateConversationDTO dto) {
+        if (dto == null) return;
+
+        Long messageId = dto.getMessageId();
+        if (ObjUtil.isEmpty(messageId)){
+            return;
+        }
+        Message message = messageMapper.selectById(messageId);
+        if (message != null){
+            log.warn("消息已存在 messageId={}", messageId);
+            return;
+        }
+
+        JsonNode payload = dto.getPayload();
+        Integer messageType = dto.getMessageType();
+        String textContent = messageType == MessageContentType.TEXT.getValue() ? payload.get("content").asText() : null;
+        Long attachmentId = messageType == MessageContentType.IMAGE.getValue() || messageType == MessageContentType.FILE.getValue() ? payload.get("attachmentId").asLong() : null;
+        message = Message.builder()
+                .id(messageId)
+                .seq(dto.getSeq())
+                .senderId(dto.getSendId())
+                .clientMessageId(dto.getClientMessageId())
+                .conversationId(dto.getConversationId())
+                .messageType(messageType)
+                .textContent(textContent)
+                .attachmentId(attachmentId)
+                .isBlocked(YesNoStatus.NO.getValue())
+                .recalledAt(null)
+                .isRecalled(YesNoStatus.NO.getValue())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        boolean inserted = false;
+        try {
+            inserted = messageMapper.insert(message) > 0;
+        } catch (DuplicateKeyException e) {
+            log.warn("消息已存在", e);
+            return;
+        }
+        UpdateConversationDTO conversationDTO = UpdateConversationDTO.builder()
+                .conversationId(dto.getConversationId())
+                .newLastSeq(dto.getSeq())
+                .lastMessageId(message.getId())
+                .lastMessageAt(message.getCreatedAt())
+                .build();
+        conversationServer.updateConversation(conversationDTO);
+    }
+
+    private static boolean sampleTiming(String clientMessageId) {
+        return clientMessageId != null
+                && Math.floorMod(clientMessageId.hashCode(), 100) == 0;
+    }
+
+    private static double elapsedMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000.0;
     }
 
 }

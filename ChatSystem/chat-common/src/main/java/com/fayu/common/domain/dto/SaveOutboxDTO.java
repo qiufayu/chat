@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 @Builder
-public class SaveMsgDTO {
+public class SaveOutboxDTO {
     private Long senderId;
     private String deviceId;
     private Long toId;

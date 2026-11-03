@@ -1,6 +1,6 @@
 logging:
   level:
-    com.fayu.connection: debug
+    com.fayu.connection: info
 spring:
   rabbitmq:
     host: ${chat.mq.host}

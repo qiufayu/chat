@@ -8,7 +8,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Component
 public class OutboxRetryExecutor extends ThreadPoolTaskExecutor {
     public OutboxRetryExecutor(){
-        this.setCorePoolSize(32);
+        this.setCorePoolSize(64);
         this.setMaxPoolSize(150);
         this.setQueueCapacity(1000);
         this.setThreadNamePrefix("chat-outbox-retry-");

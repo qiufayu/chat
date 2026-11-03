@@ -1,6 +1,7 @@
 package com.fayu.connection.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -84,6 +85,14 @@ public class MessageUtil {
             return MAPPER.writeValueAsString(o);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("序列化失败："+"{"+ o.toString() +"}",e);
+        }
+    }
+
+    public JsonNode toJsonNode(String msg){
+        try {
+            return MAPPER.readTree(msg);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("未知消息");
         }
     }
 
