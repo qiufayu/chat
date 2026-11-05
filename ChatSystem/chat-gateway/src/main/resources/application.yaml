@@ -28,6 +28,10 @@ spring:
               uri: lb://chat-group
               predicates:
                 - Path=/group/**
+            - id: chat-message-sync
+              uri: lb://chat-message
+              predicates:
+                - Path=/sync/**
   data:
     redis:
       host: ${chat.rd.host}

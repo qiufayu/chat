@@ -143,6 +143,7 @@ public class SyncServerImpl implements ISyncServer {
 
     @Override
     public SyncBatchVO intervalSyncMessages(String deviceId, Long conversationId, Long start, Long end) {
+        log.debug("客户端主动请求同步 deviceId={} conversationId={} start={} end={}",deviceId,conversationId,start,end);
         Long userId = UserContext.getUser();
         verify(start,end);
         requireUserAndDevice(userId, deviceId);
@@ -151,6 +152,7 @@ public class SyncServerImpl implements ISyncServer {
         List<SyncMessageVO> messages = messageMapper.intervalSyncMessages(
                 userId, conversationId, start, end,pageSize);
         Long nextSeq = messages.isEmpty() ? end : messages.get(messages.size() - 1).getSeq();
+        log.debug("客户端主动请求同步成功 deviceId={} conversationId={} start={} end={} 同步数据长度={}",deviceId,conversationId,start,end,messages.size());
         return SyncBatchVO.builder()
                 .conversationId(conversationId)
                 .nextSeq(nextSeq)

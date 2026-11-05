@@ -18,5 +18,5 @@ public interface ISyncServer {
 
     boolean ackRead(Long userId, ReadAckDTO ack);
 
-    SyncBatchVO intervalSyncMessages( String deviceId, Long conversationId, Long start, Long end);
+    SyncBatchVO intervalSyncMessages(String deviceId, Long conversationId, Long start, Long end);
 }

@@ -2,9 +2,7 @@ package com.fayu.message.controller;
 
 import com.fayu.common.domain.dto.ChatRequestMessageDTO;
 import com.fayu.common.domain.dto.SaveMsgAndUpdateConversationDTO;
-import com.fayu.common.domain.dto.SaveOutboxDTO;
 import com.fayu.common.domain.vo.ChatResponseMessageVO;
-import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.message.server.IMessageServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,11 +19,6 @@ public class MessageController {
     @GetMapping
     public void start(){
         log.debug("message-server 连接成功");
-    }
-
-    @PostMapping("/save")
-    public SaveMsgVO saveMsg(@RequestBody SaveOutboxDTO saveOutboxDTO){
-        return messageServer.saveOutbox(saveOutboxDTO);
     }
 
     @GetMapping("/info")

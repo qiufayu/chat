@@ -2,14 +2,15 @@ package com.fayu.message.server;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.dto.SaveOutboxDTO;
 import com.fayu.common.domain.po.MessageOutbox;
+import com.fayu.common.domain.vo.SaveMsgVO;
 
 import java.util.List;
 
-/**
- * 消息可靠投递事件表 服务类
- */
 public interface IMessageOutboxServer extends IService<MessageOutbox> {
+
+    SaveMsgVO saveOutbox(SaveOutboxDTO saveOutboxDTO);
 
     boolean updateStatusToRetry(OutBoxUpdateStatusDTO statusDTO);
 

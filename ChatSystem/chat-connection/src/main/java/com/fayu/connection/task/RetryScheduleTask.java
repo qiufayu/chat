@@ -70,9 +70,10 @@ public class RetryScheduleTask {
                 retryInsertMessageAndUpdateConversation(outbox);
                 messageInfo = msgClient.getMessageInfo(outbox.getConversationId(), outbox.getSeq());
             }
-
+            String clientMessageId = getClientMessageId(eventKey);
             MessageMetadata metadata = MessageMetadata.builder()
                     .conversationId(messageInfo.getConversationId())
+                    .clientMessageId(clientMessageId)
                     .sendId(messageInfo.getSendId())
                     .toId(messageInfo.getToId())
                     .messageId(messageInfo.getMessageId())
@@ -149,5 +150,12 @@ public class RetryScheduleTask {
                 .eventKey(outbox.getEventKey())
                 .lastError(reason)
                 .build());
+    }
+    private String getClientMessageId(String eventKey) {
+        String[] strings = eventKey.split(":");
+        if (strings.length != 4) {
+            return null;
+        }
+        return strings[2];
     }
 }

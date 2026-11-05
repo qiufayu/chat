@@ -91,4 +91,4 @@ chat:
 
 logging:
   level:
-    com.fayu: info
+    com.fayu: debug

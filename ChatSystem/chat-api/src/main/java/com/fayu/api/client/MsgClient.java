@@ -17,8 +17,8 @@ public interface MsgClient {
     @GetMapping("/msg")
     void start();
 
-    @PostMapping("/msg/save")
-    SaveMsgVO saveMsg(@RequestBody SaveOutboxDTO saveOutboxDTO);
+    @PostMapping("/outbox/save")
+    SaveMsgVO saveOutbox(@RequestBody SaveOutboxDTO saveOutboxDTO);
 
     @GetMapping("/msg/info")
     ChatResponseMessageVO<ChatRequestMessageDTO> getMessageInfo(

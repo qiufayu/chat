@@ -2,12 +2,13 @@ package com.fayu.message.controller;
 
 
 import com.fayu.common.domain.dto.OutBoxUpdateStatusDTO;
+import com.fayu.common.domain.dto.SaveOutboxDTO;
 import com.fayu.common.domain.po.MessageOutbox;
+import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.message.server.IMessageOutboxServer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -15,6 +16,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OutBoxController {
     private final IMessageOutboxServer messageOutboxServer;
+
+    @PostMapping("/save")
+    public SaveMsgVO saveOutbox(@RequestBody SaveOutboxDTO saveOutboxDTO){
+        return messageOutboxServer.saveOutbox(saveOutboxDTO);
+    }
 
     @PostMapping("/update/status")
     public boolean updateStatusToPass(@RequestBody OutBoxUpdateStatusDTO statusDTO){

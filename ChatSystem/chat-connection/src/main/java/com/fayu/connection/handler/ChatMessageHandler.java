@@ -298,7 +298,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         long feignStartedAt = System.nanoTime();
 
         try {
-            saveMsgVO = msgClient.saveMsg(saveOutboxDTO);
+            saveMsgVO = msgClient.saveOutbox(saveOutboxDTO);
         } finally {
             if (sampleTiming(saveOutboxDTO.getClientMessageId())) {
                 log.info("[PERF_FEIGN] clientMessageId={} totalMs={}",
