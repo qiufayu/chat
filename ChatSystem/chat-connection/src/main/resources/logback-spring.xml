@@ -50,11 +50,11 @@
         <appender-ref ref="DAILY_FILE"/>      <!-- 引用真正的文件 appender -->
     </appender>
 
-    <logger name="com.fayu.connection" level="INFO"/>
+    <logger name="com.fayu.connection" level="DEBUG"/>
 
     <root level="INFO">
-<!--        <appender-ref ref="CONSOLE"/>-->
-<!--        <appender-ref ref="ERROR_FILE"/>-->
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ERROR_FILE"/>
         <appender-ref ref="ASYNC_DAILY_FILE"/>
     </root>
 

@@ -298,7 +298,7 @@ public class MessageServerImpl extends ServiceImpl<MessageMapper, Message> imple
 
         JsonNode payload = dto.getPayload();
         Integer messageType = dto.getMessageType();
-        String textContent = messageType == MessageContentType.TEXT.getValue() ? payload.get("content").asText() : null;
+        String textContent = messageType == MessageContentType.TEXT.getValue() ? payload.get("textContent").asText() : null;
         Long attachmentId = messageType == MessageContentType.IMAGE.getValue() || messageType == MessageContentType.FILE.getValue() ? payload.get("attachmentId").asLong() : null;
         message = Message.builder()
                 .id(messageId)

@@ -48,6 +48,7 @@ public class RetryScheduleTask {
             if (outbox == null) {
                 continue;
             }
+            log.debug("开始处理 Outbox，OutboxId: {}", outbox.getId());
             outboxRetryExecutor.execute(() -> publishOne(outbox));
         }
     }
@@ -55,8 +56,10 @@ public class RetryScheduleTask {
     private void publishOne(MessageOutbox outbox) {
         String lockedBy = Thread.currentThread().getName();
         if (!msgClient.getRetryLock(outbox.getId(), lockedBy)) {
+            log.warn("Outbox 获取锁失败，OutboxId: {}", outbox.getId());
             return;
         }
+        log.debug("Outbox 获取锁成功，OutboxId: {}", outbox.getId());
         String eventKey = outbox.getEventKey();
         try {
             ChatResponseMessageVO<ChatRequestMessageDTO> messageInfo =
@@ -89,11 +92,13 @@ public class RetryScheduleTask {
             correlationData.getFuture().whenComplete((confirm, throwable) -> {
                 try {
                     if (throwable != null || confirm == null || !confirm.isAck()) {
+                        log.error("Outbox 事件发布失败，OutboxId: {}", outbox.getId(), throwable);
                         String reason = throwable == null
                                 ? (confirm == null ? "未收到发布确认" : confirm.getReason())
                                 : throwable.getMessage();
                         updateStatusToRetry(outbox, reason);
                     } else {
+                        log.debug("Outbox 事件发布成功，OutboxId: {}", outbox.getId());
                         msgClient.updateStatus(OutBoxUpdateStatusDTO.builder()
                                 .eventType(outbox.getEventType())
                                 .eventKey(eventKey)

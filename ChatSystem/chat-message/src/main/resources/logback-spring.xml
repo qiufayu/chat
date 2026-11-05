@@ -39,11 +39,11 @@
         </encoder>
     </appender>
 
-    <logger name="com.fayu.message" level="INFO"/>
+    <logger name="com.fayu.message" level="DEBUG"/>
 
     <root level="INFO">
-<!--        <appender-ref ref="CONSOLE"/>-->
-<!--        <appender-ref ref="ERROR_FILE"/>-->
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ERROR_FILE"/>
         <appender-ref ref="DAILY_FILE"/>
     </root>
 
