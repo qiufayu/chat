@@ -20,6 +20,12 @@ public class SyncController {
 
     private final ISyncServer syncServer;
 
+    /**
+     * 获取设备的未送达/未同步的消息数量以及未读消息数量，以及最后一条消息
+     * @param userId
+     * @param deviceId
+     * @return
+     */
     @GetMapping("/summary")
     public List<SyncSummaryVO> summary(@RequestParam("userId") Long userId,
                                        @RequestParam("deviceId") String deviceId) {
@@ -64,4 +70,5 @@ public class SyncController {
         log.info("客户端请求同步区间消息，deviceId={}, conversationId={}, start={}, end={}", deviceId, conversationId, start, end);
         return syncServer.intervalSyncMessages(deviceId,conversationId,start,end);
     }
+
 }

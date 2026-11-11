@@ -64,14 +64,20 @@ public class SyncServerImpl implements ISyncServer {
             ConversationSeqOfDeviceVO vo = ofDeviceVOMap.get(conversationId);
             long lastSeq = 0L;
             long lastSyncedSeq = 0L;
+            long unreadCount = 0L;
+            String lastMessage = null;
             if (vo != null){
                 lastSeq = vo.getLastSeq() == null ? 0L : vo.getLastSeq();
                 lastSyncedSeq = vo.getLastSyncedSeq() == null ? 0L : vo.getLastSyncedSeq();
+                unreadCount = vo.getLastReadSeq() == null ? lastSeq : Math.max(0L, lastSeq - vo.getLastReadSeq());
+                lastMessage = vo.getLastMessage() == null ? "" : vo.getLastMessage();
             }
             result.add(SyncSummaryVO.builder()
                     .conversationId(conversationId)
                     .lastSeq(lastSeq)
                     .lastSyncedSeq(lastSyncedSeq)
+                    .unreadCount(unreadCount)
+                    .lastMessage(lastMessage)
                     .pendingCount(Math.max(0L, lastSeq - lastSyncedSeq))
                     .build());
         }

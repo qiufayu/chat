@@ -9,4 +9,6 @@ public class ConversationSeqOfDeviceVO {
     private String deviceId;
     private Long lastSeq;
     private Long lastSyncedSeq;
+    private Long lastReadSeq;
+    private String lastMessage;
 }

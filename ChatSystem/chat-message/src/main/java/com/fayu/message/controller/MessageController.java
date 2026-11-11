@@ -33,4 +33,5 @@ public class MessageController {
     public void saveMsgAndUpdateConversation(@RequestBody SaveMsgAndUpdateConversationDTO dto){
         messageServer.saveMsgAndUpdateConversation(dto);
     }
+
 }

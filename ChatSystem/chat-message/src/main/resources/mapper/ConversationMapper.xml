@@ -4,8 +4,10 @@
 <mapper namespace="com.fayu.message.mapper.ConversationMapper">
     <select id="selectConversationSeqOfDevice"
             resultType="com.fayu.message.domain.vo.ConversationSeqOfDeviceVO">
-    select dsc.conversation_id, dsc.device_id , c.last_seq , dsc.last_synced_seq
+    select dsc.conversation_id, dsc.device_id , c.last_seq , dsc.last_synced_seq , uc.last_read_seq , m.text_content as last_message
     from device_sync_cursor as dsc join conversation as c on dsc.conversation_id = c.id
+                                   join user_conversation as uc on c.id = uc.conversation_id
+                                   join message as m on c.last_message_id = m.id
     where dsc.user_id = #{userId}
       and device_id = #{deviceId}
         <if test="conversationIds != null and conversationIds.size() > 0">

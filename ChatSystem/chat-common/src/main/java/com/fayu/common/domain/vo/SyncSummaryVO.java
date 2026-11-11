@@ -18,4 +18,6 @@ public class SyncSummaryVO implements Serializable {
     private Long lastSeq;
     private Long lastSyncedSeq;
     private Long pendingCount;
+    private Long unreadCount;
+    private String lastMessage;
 }
