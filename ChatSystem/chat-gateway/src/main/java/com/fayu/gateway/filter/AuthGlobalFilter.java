@@ -48,11 +48,15 @@ public class AuthGlobalFilter implements GlobalFilter , Ordered {
         if (isExclude(path.toString())){
            return chain.filter(exchange);
         }
-
+        List<String> deviceIds = request.getHeaders().get("device-id");
         String token = null;
+        String deviceIdStr;
         List<String> authorization = request.getHeaders().get("authorization");
-        if (!CollUtil.isEmpty(authorization)){
+        if (!CollUtil.isEmpty(authorization) || !CollUtil.isEmpty(deviceIds)){
             token = authorization.get(0);
+            deviceIdStr = deviceIds.get(0);
+        } else {
+            deviceIdStr = null;
         }
 
         Long userId;
@@ -63,13 +67,16 @@ public class AuthGlobalFilter implements GlobalFilter , Ordered {
             response.setStatusCode(HttpStatusCode.valueOf(401));
             return response.setComplete();
         }
-        log.debug("user_id = {} interview path = {}",userId,path);
-
+        log.info("user_id = {} interview path = {}",userId,path);
+        log.info("添加 user-info 头 = {} , device-id 头 = {} requestUri = {}", userId.toString(), deviceIdStr, request.getURI().toString());
         ServerWebExchange we = exchange.mutate()
                 .request(builder ->
                         builder.header(
                                 "user-info", userId.toString()
-                        )).build();
+                        ).header(
+                                "device-id", deviceIdStr
+                        )
+                ).build();
 
         return chain.filter(we);
     }

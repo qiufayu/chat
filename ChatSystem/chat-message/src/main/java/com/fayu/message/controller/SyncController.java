@@ -7,10 +7,12 @@ import com.fayu.common.domain.vo.SyncBatchVO;
 import com.fayu.common.domain.vo.SyncSummaryVO;
 import com.fayu.message.server.ISyncServer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/sync")
 @RequiredArgsConstructor
@@ -59,6 +61,7 @@ public class SyncController {
                                                     @RequestParam("start") Long start,
                                                     @RequestParam("end") Long end
                                                     ){
+        log.info("客户端请求同步区间消息，deviceId={}, conversationId={}, start={}, end={}", deviceId, conversationId, start, end);
         return syncServer.intervalSyncMessages(deviceId,conversationId,start,end);
     }
 }

@@ -1,5 +1,7 @@
 package com.fayu.connection.handler;
 
+import cn.hutool.core.collection.CollUtil;
+import com.alibaba.cloud.commons.lang.StringUtils;
 import com.fayu.api.client.MsgClient;
 import com.fayu.common.domain.vo.SyncSummaryVO;
 import com.fayu.common.utils.UserContext;
@@ -73,10 +75,20 @@ public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
                 env != null ? env.getClass().getName() : null);
 
         if (env instanceof WebSocketServerProtocolHandler.HandshakeComplete handshakeComplete) {
-            String requestUri = handshakeComplete.requestUri();
-            Long userId = getUserIdFromUri(requestUri);
-            String deviceId = getQueryParam(requestUri, "deviceId");
-            if (userId != null && deviceId != null && !deviceId.isBlank() && deviceId.length() <= 64) {
+            String userIdStr = handshakeComplete.requestHeaders().get("user-info");
+            String deviceId = handshakeComplete.requestHeaders().get("device-id");
+            log.debug("user-info = {}, device-id = {}", userIdStr, deviceId);
+            String requestUri = ((WebSocketServerProtocolHandler.HandshakeComplete) env).requestUri();
+            log.debug("request 握手请求 uri = {}", requestUri);
+
+            if (StringUtils.isBlank(userIdStr) || StringUtils.isBlank(deviceId)) {
+                log.error("WebSocket 握手失败，userId 或 deviceId 无效！");
+                ctx.close();
+                return;
+            }
+            Long userId = Long.parseLong(userIdStr);
+
+            if (!deviceId.isBlank() && deviceId.length() <= 64) {
                 singleSession.setAttr(channel, "userId", userId);
                 singleSession.setAttr(channel, "deviceId", deviceId);
                 singleSession.bind(channel, userId, deviceId);
@@ -85,7 +97,7 @@ public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
                 chatBusinessExecutor.execute(() -> sendSyncSummary(channel, userId, deviceId));
                 log.debug("WebSocket 握手成功！ userId={}, deviceId={}", userId, deviceId);
             } else {
-                log.error("WebSocket 握手失败，userId 或 deviceId 无效！ uri={}", requestUri);
+                log.error("WebSocket 握手失败，userId 或 deviceId 无效！ userId={}, deviceId={}", userId, deviceId);
                 ctx.close();
             }
         } else if (env instanceof IdleStateEvent event) {
@@ -123,35 +135,35 @@ public class ChannelSearchHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private Long getUserIdFromUri(String uriStr) {
-        String userId = getQueryParam(uriStr, "userId");
-        if (userId == null) {
-            return null;
-        }
-        try {
-            return Long.parseLong(userId);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("用户ID格式错误", e);
-        }
-    }
-
-    private String getQueryParam(String uriStr, String name) {
-        try {
-            URI uri = new URI(uriStr);
-            String query = uri.getQuery();
-            if (query == null) {
-                return null;
-            }
-            for (String pair : query.split("&")) {
-                String[] parts = pair.split("=", 2);
-                if (parts.length == 2 && name.equals(parts[0])) {
-                    return parts[1];
-                }
-            }
-            return null;
-        } catch (URISyntaxException e) {
-            log.warn("解析 URI 获取参数失败, uri: {}, 错误信息: {}", uriStr, e.getMessage());
-            throw new IllegalArgumentException("非法的 WebSocket 连接 URI: " + uriStr, e);
-        }
-    }
+//    private Long getUserIdFromUri(String uriStr) {
+//        String userId = getQueryParam(uriStr, "userId");
+//        if (userId == null) {
+//            return null;
+//        }
+//        try {
+//            return Long.parseLong(userId);
+//        } catch (NumberFormatException e) {
+//            throw new IllegalArgumentException("用户ID格式错误", e);
+//        }
+//    }
+//
+//    private String getQueryParam(String uriStr, String name) {
+//        try {
+//            URI uri = new URI(uriStr);
+//            String query = uri.getQuery();
+//            if (query == null) {
+//                return null;
+//            }
+//            for (String pair : query.split("&")) {
+//                String[] parts = pair.split("=", 2);
+//                if (parts.length == 2 && name.equals(parts[0])) {
+//                    return parts[1];
+//                }
+//            }
+//            return null;
+//        } catch (URISyntaxException e) {
+//            log.warn("解析 URI 获取参数失败, uri: {}, 错误信息: {}", uriStr, e.getMessage());
+//            throw new IllegalArgumentException("非法的 WebSocket 连接 URI: " + uriStr, e);
+//        }
+//    }
 }
