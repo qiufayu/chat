@@ -2,6 +2,61 @@
 
 基于 Spring Boot、Netty 和 RabbitMQ 的即时通讯后端项目，当前重点实现单聊消息发送、服务端持久化、在线推送与设备离线同步。
 
+## 功能演示
+
+以下 GIF 由 `video/` 中的实际操作录屏生成，可直接在 GitHub 页面循环展示。原始视频保留了更高分辨率，方便查看消息内容和序号变化。
+
+### 一对一单聊
+
+两个账号实时收发消息，展示连续发送、消息气泡局部更新及会话序号变化。
+
+![一对一单聊演示](video/chat-one-to-one.gif)
+
+[查看原始视频：一对一单聊](<video/一对一单聊.mp4>)
+
+### 多窗口单聊与数据同步
+
+多个窗口同时展示单聊与同步过程，可观察消息在不同窗口中的更新，以及各会话的 SEQ 进度。本演示为单聊和设备同步，不代表群聊消息链路。
+
+![多窗口单聊与数据同步演示](video/chat-multi-session-sync.gif)
+
+[查看原始视频：一对多单聊、数据同步](<video/一对多单聊，数据同步.mp4>)
+
+## 压测结果
+
+以下为 2026-11-03 记录的 JMeter 聚合报告。测试场景为 **100 个发送者向 100 个不同接收者发送消息，每个发送者发送 100 条，共 10,000 条消息**。
+
+| 指标 | 最新一轮结果 |
+| --- | ---: |
+| 消息提交吞吐 | 605.5 条/秒 |
+| 平均提交确认耗时 | 153 ms |
+| P95 提交确认耗时 | 308 ms |
+| P99 提交确认耗时 | 419 ms |
+| 发送采样错误率 | 0.00% |
+
+### 最新一轮压测截图
+
+![JMeter 最新一轮聚合报告：10,000 条消息提交样本](docs/images/pressure-test-2026-11-03/latest-result.png)
+
+<details>
+<summary>展开查看其他三轮压测截图</summary>
+
+**复测一**
+
+![JMeter 复测一聚合报告](docs/images/pressure-test-2026-11-03/repeat-01.png)
+
+**复测二**
+
+![JMeter 复测二聚合报告](docs/images/pressure-test-2026-11-03/repeat-02.png)
+
+**复测三**
+
+![JMeter 复测三聚合报告](docs/images/pressure-test-2026-11-03/repeat-03.png)
+
+</details>
+
+指标取 10,000 个消息样本对应的采样器行，采样结束点为 `SAVED_ACK`，表示消息提交至 Outbox 后的确认，**不等于消息最终落库或接收设备送达耗时**。上述数值是该环境下的单轮观测，不作为系统容量上限。测试条件、其他轮次结果和统计口径见[单聊消息压测报告](docs/单聊消息压测报告.md)。
+
 ## 功能概览
 
 - 用户注册、登录、令牌刷新及好友申请/验证。
@@ -11,7 +66,7 @@
 - Redis 用于在线关系、好友关系缓存和会话序号等快速访问数据。
 - 设备同步游标、离线补拉、连续序号确认（`DELIVERY_ACK`）和已读确认（`READ_ACK`）。
 - 群组服务提供群组及成员相关接口；端到端群聊消息链路需以当前实现和测试为准，本项目现阶段的主要验证范围是单聊。
-- JMeter 测试计划位于 `jmeter/测试计划.jmx`，测试记录位于 `jmeter/压测记录文档.md`。
+- JMeter 测试计划位于 `ChatSystem/jmeter/测试计划.jmx`，测试记录位于 `ChatSystem/jmeter/压测记录文档.md`。
 
 消息状态的含义需要区分：`SAVED_ACK` 表示服务端已接受保存请求；Outbox 的 `SENT` 表示 RabbitMQ 发布确认成功；两者都不代表接收设备已保存消息。设备游标应在客户端保存连续消息后，通过 `DELIVERY_ACK` 推进。
 
@@ -46,7 +101,7 @@
 - Nacos
 - Seata Server（当前服务配置指向 `${chat.ns.host}:8099`）
 
-用户、消息和群组服务分别连接 `user_server`、`message_server`、`group_server` 数据库。**仓库目前没有发现可直接初始化这些库的 SQL 脚本**，启动前需先准备与项目实体和 Mapper 匹配的表结构。
+用户、消息和群组服务分别连接 `user_server`、`message_server`、`group_server` 数据库。建表脚本位于 [database/database.sql](database/database.sql)，启动前请核对脚本与当前实体、Mapper 的表结构是否一致。
 
 ## 配置
 
@@ -63,9 +118,10 @@
 
 ## 构建
 
-在项目根目录执行：
+从仓库根目录进入 Maven 聚合项目后构建：
 
 ```powershell
+cd ChatSystem
 mvn -DskipTests package
 ```
 
@@ -83,7 +139,7 @@ mvn -pl chat-message -am package -DskipTests
 2. `chat-gateway`
 3. `chat-connection`
 
-可以在 IDE 中分别运行各模块的 Spring Boot 启动类，并启用 `local` profile。也可以先构建，再在 PowerShell 的不同终端运行：
+可以在 IDE 中分别运行各模块的 Spring Boot 启动类，并启用 `local` profile。也可以先构建，再在 PowerShell 的不同终端进入 `ChatSystem` 目录运行：
 
 ```powershell
 java -jar chat-user/target/chat-user-1.0-SNAPSHOT.jar --spring.profiles.active=local
@@ -103,7 +159,7 @@ java -jar chat-connection/target/chat-connection-1.0-SNAPSHOT.jar --spring.profi
 | 消息服务 | `http://localhost:8083` |
 | WebSocket | `ws://localhost:9000/ws` |
 
-网关当前配置了 `/user/**`、`/friend/**` 和 `/group/**` 路由。消息服务的同步、确认等接口定义在 `chat-message` 模块中；请使用下方协议文档和控制器实现核对具体参数。
+网关当前配置了 `/user/**`、`/friend/**`、`/group/**`、`/sync/**` 和 `/ws/**` 路由。消息服务的同步、确认等接口定义在 `chat-message` 模块中；请使用下方协议文档和控制器实现核对具体参数。
 
 ## 单聊消息流程
 
@@ -122,11 +178,11 @@ java -jar chat-connection/target/chat-connection-1.0-SNAPSHOT.jar --spring.profi
 
 ## 文档和测试
 
-- [连接与消息同步协议](../docs/连接文档.md)：WebSocket 帧、`SAVED_ACK`、同步请求、设备游标和 ACK 约定。
-- [单聊消息压测报告](../docs/单聊消息压测报告.md)：压测条件、结果和限制说明。
-- [产品需求说明书](../docs/产品需求说明书.md)
-- [开发技术选型说明](../docs/开发技术选型说明.md)
-- [JMeter 测试计划](jmeter/测试计划.jmx)
+- [连接与消息同步协议](docs/连接文档.md)：WebSocket 帧、`SAVED_ACK`、同步请求、设备游标和 ACK 约定。
+- [单聊消息压测报告](docs/单聊消息压测报告.md)：压测条件、结果和限制说明。
+- [产品需求说明书](docs/产品需求说明书.md)
+- [开发技术选型说明](docs/开发技术选型说明.md)
+- [JMeter 测试计划](ChatSystem/jmeter/测试计划.jmx)
 
 运行 JMeter 前，需要先准备测试账号、好友关系、数据库和中间件，并检查测试计划中的 CSV 数据、目标地址及线程配置。压测结果只适用于报告记录的环境和测试条件。
 

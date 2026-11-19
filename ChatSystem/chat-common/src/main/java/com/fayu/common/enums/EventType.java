@@ -1,4 +1,4 @@
-package com.fayu.connection.enums;
+package com.fayu.common.enums;
 
 import lombok.Getter;
 

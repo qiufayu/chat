@@ -1,4 +1,4 @@
-package com.fayu.connection.executor;
+package com.fayu.message.executor;
 
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;

@@ -66,10 +66,6 @@ public class MessageListener {
             log.debug("用户 {} 不在线，等待重连同步 messageId={}", toId, metadata.getMessageId());
             return;
         }
-
-        String eventType = metadata.getEventType();
-        String eventKey = MESSAGE_CREATE_EVENT_KEY.formatted(sendId, metadata.getClientMessageId());
-
         ChatResponseMessageVO<Object> messageVO = new ChatResponseMessageVO<>();
         BeanUtil.copyProperties(metadata, messageVO);
         messageVO.setConversationId(metadata.getConversationId());
@@ -94,8 +90,7 @@ public class MessageListener {
                 if (!future.isSuccess()) {
                     Throwable cause = future.cause();
                     log.warn("在线消息写入通道失败，等待重试 messageId={}", metadata.getMessageId(), cause);
-                    // 关闭通道
-                    channel.close();
+                    updateStatusToRetry(metadata.getEventType(), getEventKey(metadata), cause.getMessage());
                 }
 
             });
@@ -158,8 +153,8 @@ public class MessageListener {
             }
             channel.writeAndFlush(new TextWebSocketFrame(json)).addListener(future -> {
                 if (!future.isSuccess()) {
-                    log.warn("自同步到发送者其他设备失败 messageId={}, deviceId={}",
-                            metadata.getMessageId(), channelDeviceId, future.cause());
+                    log.warn("自同步到发送者其他设备失败 messageId={}, deviceId={}", metadata.getMessageId(), channelDeviceId, future.cause());
+                    updateStatusToRetry(metadata.getEventType(), getEventKey(metadata), future.cause().getMessage());
                 }
             });
         }
@@ -171,5 +166,9 @@ public class MessageListener {
                 .eventKey(eventKey)
                 .lastError(reason)
                 .build());
+    }
+
+    private String getEventKey(MessageMetadata metadata) {
+        return MESSAGE_CREATE_EVENT_KEY.formatted(metadata.getSendId(), metadata.getClientMessageId());
     }
 }

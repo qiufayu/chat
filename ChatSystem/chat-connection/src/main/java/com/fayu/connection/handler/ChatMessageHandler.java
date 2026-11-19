@@ -9,11 +9,11 @@ import com.fayu.common.domain.vo.SaveMsgVO;
 import com.fayu.common.domain.vo.SyncBatchVO;
 import com.fayu.common.exception.BaseException;
 import com.fayu.connection.domain.po.Message;
-import com.fayu.connection.enums.EventType;
+import com.fayu.common.enums.EventType;
 import com.fayu.connection.enums.MessageContentType;
-import com.fayu.connection.enums.OutboxStatusEnum;
+import com.fayu.common.enums.OutboxStatusEnum;
 import com.fayu.connection.executor.ChatBusinessExecutor;
-import com.fayu.connection.executor.OutboxRetryExecutor;
+
 import com.fayu.connection.factory.SingleSessionFactory;
 import com.fayu.connection.session.SingleSession;
 import com.fayu.connection.utils.MessageUtil;
@@ -48,7 +48,6 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private final MessageUtil messageUtil;
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate stringRedisTemplate;
-    private final OutboxRetryExecutor outboxRetryExecutor;
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message<?> msg) {
         SingleSession session = SingleSessionFactory.getSession();
@@ -121,7 +120,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
             return;
         }
         // 异步插入消息和更新会话
-        outboxRetryExecutor.execute(()->{
+        chatBusinessExecutor.execute(()->{
             try {
                 String lockedBy = Thread.currentThread().getName();
                 if (!msgClient.getRetryLock(metadata.getOutboxId(), lockedBy)) {
@@ -220,12 +219,8 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
 
                 String reason = null;
                 if (!success) {
-                    reason = error != null ? error.getMessage()
-                            : correlationData.getReturned() != null
-                            ? "消息未路由到目标队列"
-                            : confirm == null
-                            ? "未收到发布确认"
-                            : confirm.getReason();
+                    reason = error != null ? error.getMessage() : correlationData.getReturned() != null
+                            ? "消息未路由到目标队列" : confirm == null ? "未收到发布确认" : confirm.getReason();
                 }
 
                 finishOutboxAsync(metadata, success, reason);

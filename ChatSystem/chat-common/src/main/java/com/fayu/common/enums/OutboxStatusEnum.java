@@ -1,4 +1,4 @@
-package com.fayu.connection.enums;
+package com.fayu.common.enums;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
