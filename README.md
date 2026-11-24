@@ -59,7 +59,7 @@
 
 ## 功能概览
 
-- 用户注册、登录、令牌刷新及好友申请/验证。
+- 用户注册、登录、令牌刷新及好友申请、同意/拒绝、校验、双向删除；申请有效期7天。
 - 基于 Netty WebSocket 的实时连接，连接入口为 `/ws`。
 - 单聊消息按会话分配 `seq`，以 `clientMessageId` 支持发送幂等。
 - 消息 Outbox、RabbitMQ 发布确认和定时扫描补偿。
@@ -178,6 +178,7 @@ java -jar chat-connection/target/chat-connection-1.0-SNAPSHOT.jar --spring.profi
 
 ## 文档和测试
 
+- [好友链路与接口](docs/好友链路.md)：申请审批、好友校验、双向删除、增量建表和兼容说明。
 - [连接与消息同步协议](docs/连接文档.md)：WebSocket 帧、`SAVED_ACK`、同步请求、设备游标和 ACK 约定。
 - [单聊消息压测报告](docs/单聊消息压测报告.md)：压测条件、结果和限制说明。
 - [产品需求说明书](docs/产品需求说明书.md)

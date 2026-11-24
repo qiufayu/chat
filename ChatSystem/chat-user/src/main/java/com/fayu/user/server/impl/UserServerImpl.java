@@ -53,7 +53,7 @@ public class UserServerImpl extends ServiceImpl<UserMapper, User> implements IUs
         }
         User user = lambdaQuery().eq(User::getAccount, account).one();
         Assert.notNull(user,"用户名错误");
-        if (user.getStatus() != UserStatus.FROZEN.getValue()){
+        if (!Integer.valueOf(UserStatus.NORMAL.getValue()).equals(user.getStatus())){
             throw new ForbiddenException("用户被冻结");
         }
         // 4.校验密码
@@ -92,7 +92,7 @@ public class UserServerImpl extends ServiceImpl<UserMapper, User> implements IUs
         regUser.setPassword(passwordEncoder.encode(password));
         regUser.setNickname(nickname);
         regUser.setPhone(phone);
-        regUser.setStatus(UserStatus.FROZEN.getValue());
+        regUser.setStatus(UserStatus.NORMAL.getValue());
         regUser.setCreatedAt(LocalDateTime.now());
         regUser.setUpdatedAt(LocalDateTime.now());
         regUser.setAvatar(defaultAvatar());

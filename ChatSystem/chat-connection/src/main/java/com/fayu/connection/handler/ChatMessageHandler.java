@@ -2,6 +2,8 @@ package com.fayu.connection.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fayu.api.client.MsgClient;
+import com.fayu.api.client.UserClient;
+import com.fayu.api.domain.dto.VerifyMsgDTO;
 import com.fayu.common.domain.dto.*;
 import com.fayu.common.domain.po.EventEnvelope;
 import com.fayu.common.domain.po.MessageMetadata;
@@ -25,7 +27,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -47,7 +48,7 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
     private final ChatBusinessExecutor chatBusinessExecutor;
     private final MessageUtil messageUtil;
     private final RabbitTemplate rabbitTemplate;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final UserClient userClient;
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Message<?> msg) {
         SingleSession session = SingleSessionFactory.getSession();
@@ -103,9 +104,11 @@ public class ChatMessageHandler extends io.netty.channel.SimpleChannelInboundHan
         if (toUserId == null || msg.getClientMessageId() == null || msg.getClientMessageId().isBlank()) {
             throw new BaseException("聊天消息参数错误", 400);
         }
-        Boolean friend = stringRedisTemplate.opsForSet()
-                .isMember("user:friend:" + userId, String.valueOf(toUserId));
-        if (!Boolean.TRUE.equals(friend)) {
+        VerifyMsgDTO verify = new VerifyMsgDTO();
+        verify.setSenderId(userId);
+        verify.setToId(toUserId);
+        // Executor threads do not inherit UserContext; forward the bound channel identity explicitly.
+        if (!userClient.verifyFriend(verify, userId)) {
             throw new BaseException("对方不是好友或已被拉黑", 403);
         }
         ChatRequestMessageDTO request = castPayload(msg.getPayload(), ChatRequestMessageDTO.class);

@@ -23,8 +23,12 @@ public class DefaultFeignConfig {
         return new RequestInterceptor() {
             @Override
             public void apply(RequestTemplate requestTemplate) {
+                // A caller may explicitly supply the authenticated channel identity from an executor thread.
+                if (requestTemplate.headers().containsKey("user-info")) {
+                    return;
+                }
                 Long userId = UserContext.getUser();
-                log.debug("请求 path={} 添加信息 user-info={}",requestTemplate.request().url(),userId);
+                log.debug("请求 path={} 添加信息 user-info={}",requestTemplate.url(),userId);
                 if (userId == null){
                     return;
                 }
