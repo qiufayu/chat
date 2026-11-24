@@ -9,7 +9,7 @@
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
     </TestPlan>
     <hashTree>
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="接收者线程组：100 个线程">
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="接收者线程组：100 个线程" enabled="true">
         <intProp name="ThreadGroup.num_threads">100</intProp>
         <intProp name="ThreadGroup.ramp_time">1</intProp>
         <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
@@ -44,7 +44,7 @@
           </eu.luminis.jmeter.wssampler.OpenWebSocketSampler>
           <hashTree/>
         </hashTree>
-        <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器">
+        <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器" enabled="true">
           <stringProp name="LoopController.loops">100</stringProp>
         </LoopController>
         <hashTree>
@@ -69,7 +69,7 @@
             <hashTree/>
           </hashTree>
         </hashTree>
-        <ResultCollector guiclass="StatVisualizer" testclass="ResultCollector" testname="聚合报告">
+        <ResultCollector guiclass="StatVisualizer" testclass="ResultCollector" testname="聚合报告" enabled="true">
           <boolProp name="ResultCollector.error_logging">false</boolProp>
           <objProp>
             <name>saveConfig</name>
@@ -118,7 +118,7 @@
         </elementProp>
       </ThreadGroup>
       <hashTree>
-        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="CSV 数据文件设置" enabled="true">
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="CSV 数据文件设置">
           <stringProp name="delimiter">,</stringProp>
           <stringProp name="fileEncoding">UTF-8</stringProp>
           <stringProp name="filename">E:\Project\five\ChatSystem\jmeter\pairs.csv</stringProp>
@@ -130,7 +130,7 @@
           <stringProp name="variableNames">userId,toId</stringProp>
         </CSVDataSet>
         <hashTree/>
-        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="仅一次控制器" enabled="true"/>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="仅一次控制器"/>
         <hashTree>
           <eu.luminis.jmeter.wssampler.OpenWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.OpenWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler" testname="WebSocket Open Connection" enabled="true">
             <boolProp name="TLS">false</boolProp>
@@ -143,10 +143,10 @@
           <hashTree/>
         </hashTree>
         <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="循环控制器">
-          <stringProp name="LoopController.loops">100</stringProp>
+          <stringProp name="LoopController.loops">1000</stringProp>
         </LoopController>
         <hashTree>
-          <eu.luminis.jmeter.wssampler.TextFrameFilter guiclass="eu.luminis.jmeter.wssampler.TextFrameFilterGui" testclass="eu.luminis.jmeter.wssampler.TextFrameFilter" testname="WebSocket Text Frame Filter" enabled="true">
+          <eu.luminis.jmeter.wssampler.TextFrameFilter guiclass="eu.luminis.jmeter.wssampler.TextFrameFilterGui" testclass="eu.luminis.jmeter.wssampler.TextFrameFilter" testname="WebSocket Text Frame Filter">
             <stringProp name="comparisonType">Contains</stringProp>
             <stringProp name="matchValue">CONNECTION_READY</stringProp>
           </eu.luminis.jmeter.wssampler.TextFrameFilter>
@@ -178,7 +178,7 @@
             <stringProp name="dataFile"></stringProp>
           </eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler>
           <hashTree/>
-          <JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="JSON断言">
+          <JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="JSON断言" enabled="true">
             <stringProp name="JSON_PATH">$.type</stringProp>
             <stringProp name="EXPECTED_VALUE">SAVED_ACK</stringProp>
             <boolProp name="JSONVALIDATION">true</boolProp>
@@ -188,7 +188,7 @@
           </JSONPathAssertion>
           <hashTree/>
         </hashTree>
-        <eu.luminis.jmeter.wssampler.CloseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.CloseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.CloseWebSocketSampler" testname="WebSocket Close">
+        <eu.luminis.jmeter.wssampler.CloseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.CloseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.CloseWebSocketSampler" testname="WebSocket Close" enabled="true">
           <stringProp name="statusCode">1000</stringProp>
           <stringProp name="readTimeout">6000</stringProp>
         </eu.luminis.jmeter.wssampler.CloseWebSocketSampler>
